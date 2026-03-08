@@ -370,7 +370,7 @@ class LinupApp:
     # NEW INVESTMENT — Step 2: table names and banks
     # ──────────────────────────────────────────────────────────────────
     def _show_table_setup(self, inv_name: str, capital: float, num_tables: int):
-        bank_per_table = round(capital * 0.05, 2)
+        bank_per_table = round(capital * 0.03, 2)
         name_fields = []
         bank_fields = []
         rows = []
@@ -645,11 +645,27 @@ class LinupApp:
                             self.show_investment_dashboard(iid)
                         return loader
 
+                    def make_editor(iid):
+                        def editor(ev):
+                            self.show_edit_investment(iid)
+                        return editor
+
                     rows.append(
-                        ft.ElevatedButton(
-                            txt, on_click=make_loader(inv_id),
-                            width=340, height=60,
-                            style=ft.ButtonStyle(bgcolor='#222222', color=color),
+                        ft.Row(
+                            controls=[
+                                ft.ElevatedButton(
+                                    txt, on_click=make_loader(inv_id),
+                                    expand=True, height=60,
+                                    style=ft.ButtonStyle(bgcolor='#222222', color=color),
+                                ),
+                                ft.ElevatedButton(
+                                    "EDIT", on_click=make_editor(inv_id),
+                                    width=60, height=60,
+                                    style=ft.ButtonStyle(bgcolor='#34495e',
+                                                         color=ft.Colors.WHITE),
+                                ),
+                            ],
+                            spacing=4,
                         )
                     )
             except Exception as ex:
@@ -682,6 +698,183 @@ class LinupApp:
         )
 
     # ──────────────────────────────────────────────────────────────────
+    # EDIT / DELETE INVESTMENT
+    # ──────────────────────────────────────────────────────────────────
+    def show_edit_investment(self, inv_id):
+        inv_name    = ""
+        inv_capital = 0.0
+        tables_data = []  # list of (table_id, mesa_name, init_bank)
+        conn = self._get_conn()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT name, capital FROM investments WHERE id=?", (inv_id,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    inv_name, inv_capital = row
+                cursor.execute(
+                    "SELECT id, mesa_name, init_bank FROM investment_tables "
+                    "WHERE investment_id=? ORDER BY id",
+                    (inv_id,)
+                )
+                tables_data = cursor.fetchall()
+            except Exception:
+                pass
+            finally:
+                conn.close()
+
+        name_field = ft.TextField(
+            label="Investment Name", value=inv_name,
+            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=50,
+        )
+        capital_field = ft.TextField(
+            label="Capital ($)", value=str(inv_capital),
+            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=50,
+            keyboard_type=ft.KeyboardType.NUMBER,
+        )
+
+        # Table edit rows: (table_id, name_field, bank_field)
+        table_rows_ui = []
+        table_fields  = []
+        for tid, mname, mbank in tables_data:
+            nf = ft.TextField(
+                value=mname,
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+                expand=2,
+            )
+            bf = ft.TextField(
+                value=str(mbank),
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+                keyboard_type=ft.KeyboardType.NUMBER, expand=1,
+            )
+            table_fields.append((tid, nf, bf))
+            table_rows_ui.append(ft.Row(controls=[nf, bf], spacing=6))
+
+        def on_save(ev):
+            conn2 = self._get_conn()
+            if not conn2:
+                return
+            try:
+                new_name    = name_field.value.strip().upper() or inv_name
+                new_capital = float(capital_field.value or inv_capital)
+                conn2.execute(
+                    "UPDATE investments SET name=?, capital=? WHERE id=?",
+                    (new_name, round(new_capital, 2), inv_id)
+                )
+                for tid, nf, bf in table_fields:
+                    t_name = nf.value.strip().upper()
+                    try:
+                        t_bank = float(bf.value)
+                    except Exception:
+                        t_bank = 0.0
+                    conn2.execute(
+                        "UPDATE investment_tables SET mesa_name=?, init_bank=? WHERE id=?",
+                        (t_name, round(t_bank, 2), tid)
+                    )
+                conn2.commit()
+            except Exception:
+                pass
+            finally:
+                conn2.close()
+            self.show_load_investments()
+
+        def on_delete(ev):
+            dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
+
+            def confirm_delete(ev2):
+                dlg.open = False
+                self.page.update()
+                conn3 = self._get_conn()
+                if conn3:
+                    try:
+                        conn3.execute(
+                            "DELETE FROM investment_tables WHERE investment_id=?", (inv_id,)
+                        )
+                        conn3.execute(
+                            "DELETE FROM investments WHERE id=?", (inv_id,)
+                        )
+                        conn3.commit()
+                    except Exception:
+                        pass
+                    finally:
+                        conn3.close()
+                self.show_load_investments()
+
+            def cancel_delete(ev2):
+                dlg.open = False
+                self.page.update()
+
+            dlg.title = ft.Text("DELETE INVESTMENT", color='#e74c3c',
+                                size=16, weight=ft.FontWeight.BOLD,
+                                text_align=ft.TextAlign.CENTER)
+            dlg.content = ft.Text(
+                f"Delete '{inv_name}'?\nThis cannot be undone.",
+                color=ft.Colors.WHITE, size=14,
+                text_align=ft.TextAlign.CENTER,
+            )
+            dlg.actions = [
+                ft.ElevatedButton(
+                    "CANCEL", on_click=cancel_delete, expand=1,
+                    style=ft.ButtonStyle(bgcolor='#555555', color=ft.Colors.WHITE),
+                ),
+                ft.ElevatedButton(
+                    "DELETE", on_click=confirm_delete, expand=1,
+                    style=ft.ButtonStyle(bgcolor='#e74c3c', color=ft.Colors.WHITE),
+                ),
+            ]
+            dlg.actions_alignment = ft.MainAxisAlignment.CENTER
+            self.page.overlay.append(dlg)
+            dlg.open = True
+            self.page.update()
+
+        table_section = []
+        if table_rows_ui:
+            table_section = [
+                ft.Container(height=12),
+                ft.Text("TABLES", color='#7f8c8d', size=12, weight=ft.FontWeight.BOLD),
+                ft.Row(controls=[
+                    ft.Text("TABLE NAME", color='#7f8c8d', size=11, expand=2),
+                    ft.Text("BANK", color='#7f8c8d', size=11, expand=1),
+                ]),
+            ] + table_rows_ui
+
+        controls = [
+            ft.ElevatedButton(
+                "BACK", on_click=self.show_load_investments,
+                style=ft.ButtonStyle(bgcolor='#34495e', color=ft.Colors.WHITE),
+            ),
+            ft.Container(height=12),
+            ft.Text("EDIT INVESTMENT", color='#3498db', size=18,
+                    weight=ft.FontWeight.BOLD),
+            ft.Container(height=10),
+            name_field,
+            ft.Container(height=8),
+            capital_field,
+        ] + table_section + [
+            ft.Container(height=20),
+            ft.ElevatedButton(
+                "SAVE CHANGES", on_click=on_save,
+                height=60, expand=True,
+                style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE),
+            ),
+            ft.Container(height=10),
+            ft.ElevatedButton(
+                "DELETE INVESTMENT", on_click=on_delete,
+                height=50, expand=True,
+                style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE),
+            ),
+        ]
+
+        self._set_view(
+            ft.Container(
+                bgcolor='#1a1a1a', expand=True, padding=20,
+                content=ft.ListView(expand=True, controls=controls),
+            )
+        )
+
+    # ──────────────────────────────────────────────────────────────────
     # SESSION SETUP FORM
     # ──────────────────────────────────────────────────────────────────
     def render_setup_form(self, is_continue: bool):
@@ -690,8 +883,8 @@ class LinupApp:
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
             read_only=True,
         )
-        sug_fin  = round(self.banca_actual * 0.0005, 2)
-        sug_fout = round(self.banca_actual * 0.0015, 2)
+        sug_fin  = round(self.banca_actual * 0.000375, 2)
+        sug_fout = round(self.banca_actual * 0.0033, 2)
         self.fin_input = ft.TextField(
             value=str(sug_fin),
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
@@ -706,8 +899,8 @@ class LinupApp:
         def _on_bank_change(e):
             try:
                 bk = float(self.banca_input.value or 0)
-                self.fin_input.value  = str(round(bk * 0.0005, 2))
-                self.fout_input.value = str(round(bk * 0.0015, 2))
+                self.fin_input.value  = str(round(bk * 0.000375, 2))
+                self.fout_input.value = str(round(bk * 0.0033, 2))
                 self.fin_input.update()
                 self.fout_input.update()
             except Exception:
@@ -736,9 +929,9 @@ class LinupApp:
                         self.table_input,
                         ft.Text("BANK:", color=ft.Colors.WHITE),
                         self.banca_input,
-                        ft.Text("CHIP IN (0.05% bank):", color=ft.Colors.WHITE),
+                        ft.Text("CHIP IN (0.0375% bank):", color=ft.Colors.WHITE),
                         self.fin_input,
-                        ft.Text("CHIP OUT BASE (0.15% bank):", color=ft.Colors.WHITE),
+                        ft.Text("CHIP OUT BASE (0.33% bank):", color=ft.Colors.WHITE),
                         self.fout_input,
                         ft.Container(height=10),
                         ft.ElevatedButton(
@@ -760,8 +953,8 @@ class LinupApp:
             self.nombre_mesa   = str(self.table_input.value).upper() or "TABLE 1"
             self.banca_inicial = float(self.banca_input.value or 100)
             self.banca_actual  = self.banca_inicial
-            self.val_fin       = float(self.fin_input.value)  if self.fin_input.value  else round(self.banca_inicial * 0.0005, 2)
-            self.val_fout      = float(self.fout_input.value) if self.fout_input.value else round(self.banca_inicial * 0.0015, 2)
+            self.val_fin       = float(self.fin_input.value)  if self.fin_input.value  else round(self.banca_inicial * 0.000375, 2)
+            self.val_fout      = float(self.fout_input.value) if self.fout_input.value else round(self.banca_inicial * 0.0033, 2)
         except Exception:
             pass
         self.show_game_screen()
@@ -1162,6 +1355,8 @@ class LinupApp:
                     spacing=0,
                 )
             )
+        self.reg_header_row.update()
+        self.reg_rows_box.update()
         self.page.update()
 
     # ──────────────────────────────────────────────────────────────────
@@ -1224,7 +1419,10 @@ class LinupApp:
     def process_number(self, e):
         try:
             btn = e.control
-            self._flash_button(btn, btn.style.bgcolor, 300)
+            try:
+                self._flash_button(btn, btn.style.bgcolor, 300)
+            except Exception:
+                pass
 
             num = int(e.control.data)
             if self.activa:
@@ -1268,8 +1466,11 @@ class LinupApp:
             self.update_ui()
             self.update_registration_table()
             self.actualizar_sugerencias()
-        except Exception:
-            pass
+        except Exception as _err:
+            import traceback
+            with open("/tmp/linup_error.log", "a") as _f:
+                _f.write(f"[process_number] {type(_err).__name__}: {_err}\n")
+                traceback.print_exc(file=_f)
 
     def _refresh_mixer_colors(self):
         has_sel = bool(self.grupos_activos)
