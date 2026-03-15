@@ -14,10 +14,10 @@ GRUPOS_MAESTROS = {
     '36': {3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36},
     '1a': set(range(1, 13)), '2a': set(range(13, 25)), '3a': set(range(25, 37)),
     'Z0': {0, 3, 12, 15, 26, 32, 35},
-    'ZG': {0, 2, 3, 4, 7, 12, 15, 18, 21, 19, 22, 25, 26, 28, 29, 32, 35},
+    'ZG': {2, 4, 7, 18, 21, 19, 22, 25, 28, 29},
     'ZP': {5, 8, 10, 11, 13, 16, 23, 24, 27, 30, 33, 36},
     'H':  {1, 6, 9, 14, 17, 20, 31, 34},
-    'T1': {0, 2, 4, 6, 13, 15, 17, 19, 21, 25, 27, 32, 34},
+    'T1': {2, 4, 6, 13, 15, 17, 19, 21, 25, 27, 32, 34},
     'T2': {1, 5, 8, 10, 11, 16, 20, 23, 24, 30, 33, 36},
     'T3': {0, 3, 7, 9, 12, 14, 18, 22, 26, 28, 29, 31, 35},
 }
@@ -42,7 +42,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v11.4"
+        self.page.title      = "Linup v11.5"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -185,13 +185,15 @@ class LinupApp:
             return False, str(ex)
 
     def _update_table_stats(self, is_win: bool):
-        """Increment win or loss counter and update last_bank for this table."""
+        """Increment win or loss counter and update last_bank for this table.
+        A break-even session (0% P/L) is not counted as W or L."""
+        profit = round(self.banca_actual - self.banca_inicial, 2)
         conn = self._get_conn()
         if not conn:
             return
         try:
-            w  = 1 if is_win else 0
-            l  = 0 if is_win else 1
+            w  = 0 if profit == 0 else (1 if is_win else 0)
+            l  = 0 if profit == 0 else (0 if is_win else 1)
             bk = round(float(self.banca_actual), 2)
             conn.execute(
                 "INSERT INTO table_stats (mesa, wins, losses, last_bank) "
@@ -261,7 +263,7 @@ class LinupApp:
                         ft.Text("Linup", color='#3498db', size=64,
                                 weight=ft.FontWeight.BOLD),
                         ft.Container(height=8),
-                        ft.Text("v11.4", color='#7f8c8d', size=18),
+                        ft.Text("v11.5", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -308,7 +310,7 @@ class LinupApp:
         )
 
     # ──────────────────────────────────────────────────────────────────
-    # NEW INVESTMENT — Step 1: name / capital / number of tables
+    # NEW INVESTMENT — Step 1: name + capital
     # ──────────────────────────────────────────────────────────────────
     def show_new_investment_form(self, e=None):
         inv_name_field = ft.TextField(
@@ -320,20 +322,14 @@ class LinupApp:
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=50,
             keyboard_type=ft.KeyboardType.NUMBER,
         )
-        num_tables_field = ft.TextField(
-            label="Number of Tables", value="1",
-            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=50,
-            keyboard_type=ft.KeyboardType.NUMBER,
-        )
 
         def on_next(ev):
             try:
-                inv_name   = inv_name_field.value.strip().upper() or "INVESTMENT 1"
-                capital    = float(capital_field.value or 0)
-                num_tables = max(1, min(10, int(num_tables_field.value or 1)))
+                inv_name = inv_name_field.value.strip().upper() or "INVESTMENT 1"
+                capital  = float(capital_field.value or 0)
             except Exception:
                 return
-            self._show_table_setup(inv_name, capital, num_tables)
+            self._show_num_tables_form(inv_name, capital)
 
         self._set_view(
             ft.Container(
@@ -353,7 +349,50 @@ class LinupApp:
                         inv_name_field,
                         ft.Container(height=8),
                         capital_field,
-                        ft.Container(height=8),
+                        ft.Container(height=20),
+                        ft.ElevatedButton(
+                            "NEXT  →", on_click=on_next,
+                            height=60, expand=True,
+                            style=ft.ButtonStyle(bgcolor='#2980b9',
+                                                 color=ft.Colors.WHITE),
+                        ),
+                    ],
+                ),
+            )
+        )
+
+    # NEW INVESTMENT — Step 2: number of tables
+    # ──────────────────────────────────────────────────────────────────
+    def _show_num_tables_form(self, inv_name: str, capital: float):
+        num_tables_field = ft.TextField(
+            label="Number of Tables", value="1",
+            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=50,
+            keyboard_type=ft.KeyboardType.NUMBER,
+        )
+
+        def on_next(ev):
+            try:
+                num_tables = max(1, min(10, int(num_tables_field.value or 1)))
+            except Exception:
+                return
+            self._show_table_setup(inv_name, capital, num_tables)
+
+        self._set_view(
+            ft.Container(
+                bgcolor='#1a1a1a', expand=True, padding=20,
+                content=ft.ListView(
+                    expand=True,
+                    controls=[
+                        ft.ElevatedButton(
+                            "←  BACK", on_click=self.show_new_investment_form,
+                            style=ft.ButtonStyle(bgcolor='#c0392b',
+                                                 color=ft.Colors.WHITE),
+                        ),
+                        ft.Container(height=16),
+                        ft.Text(inv_name, color='#3498db', size=20,
+                                weight=ft.FontWeight.BOLD),
+                        ft.Text(f"Capital: ${capital:,.2f}", color='#7f8c8d', size=14),
+                        ft.Container(height=12),
                         num_tables_field,
                         ft.Container(height=20),
                         ft.ElevatedButton(
@@ -547,12 +586,13 @@ class LinupApp:
                 total_pl   = sum(d[4] - d[1] for d in all_tdata)
                 total_bank = sum(d[4] for d in all_tdata)
                 if table_rows:
-                    t  = total_wins + total_losses
-                    te = (total_wins / t * 100) if t > 0 else 0.0
-                    tc = '#2ecc71' if total_pl >= 0 else '#e74c3c'
+                    # Efficiency = avg per-table W/L ratio across tables that have played
+                    played = [(d[2], d[3]) for d in all_tdata if d[2] + d[3] > 0]
+                    te     = (sum(w / (w + l) * 100 for w, l in played) / len(played)) if played else 0.0
+                    tc     = '#2ecc71' if total_pl >= 0 else '#e74c3c'
                     pl_sign  = "+" if total_pl >= 0 else ""
                     pl_pct   = (total_pl / float(inv_capital) * 100) if inv_capital else 0.0
-                    eff_txt  = f"EFF: {te:.0f}%  W:{total_wins} L:{total_losses}\n" if t > 0 else ""
+                    eff_txt  = f"EFF: {te:.0f}%  W:{total_wins} L:{total_losses}\n" if played else ""
                     table_rows.insert(0, ft.Container(
                         bgcolor='#1e2d1e' if total_pl >= 0 else '#2d1e1e',
                         padding=10, margin=ft.margin.only(bottom=4),
@@ -884,31 +924,76 @@ class LinupApp:
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
             read_only=True,
         )
-        sug_fin  = round(self.banca_actual * 0.000375, 2)
-        sug_fout = round(self.banca_actual * 0.0033, 2)
+        # 3 losses = 100% bank: chip_in × 225 = bank, chip_out × 26 = bank
+        sug_bank = self.banca_actual
+        sug_fin  = round(sug_bank / 225, 6)
+        sug_fout = round(sug_bank / 26, 4)
+
+        def _chip_label_text(chip_val, bank, multiplier_sum):
+            """chip_val × multiplier_sum = total 3-loss cost; % relative to bank"""
+            try:
+                pct      = (chip_val / bank * 100) if bank > 0 else 0
+                loss     = chip_val * multiplier_sum
+                loss_pct = (loss / bank * 100) if bank > 0 else 0
+                return f"({pct:.4f}% bank · 3 losses = ${loss:.2f} = {loss_pct:.1f}% bank)"
+            except Exception:
+                return ""
+
+        # IN: 25 avg chips × sum([1,3,5]) = 225  →  3 losses = 100% bank
+        # OUT: sum([2,6,18]) = 26               →  3 losses = 100% bank
+        self.fin_label  = ft.Text(
+            f"CHIP IN {_chip_label_text(sug_fin,  sug_bank, 225)}:",
+            color=ft.Colors.WHITE,
+        )
+        self.fout_label = ft.Text(
+            f"CHIP OUT {_chip_label_text(sug_fout, sug_bank, 26)}:",
+            color=ft.Colors.WHITE,
+        )
+
+        def _refresh_labels(bank, fin_val, fout_val):
+            self.fin_label.value  = f"CHIP IN {_chip_label_text(fin_val,  bank, 225)}:"
+            self.fout_label.value = f"CHIP OUT {_chip_label_text(fout_val, bank, 26)}:"
+            try:
+                self.fin_label.update()
+                self.fout_label.update()
+            except Exception:
+                pass
+
+        def _on_bank_change(e):
+            try:
+                bk       = float(self.banca_input.value or 0)
+                fin_val  = round(bk / 225, 6)
+                fout_val = round(bk / 26, 4)
+                self.fin_input.value  = str(fin_val)
+                self.fout_input.value = str(fout_val)
+                self.fin_input.update()
+                self.fout_input.update()
+                _refresh_labels(bk, fin_val, fout_val)
+            except Exception:
+                pass
+
         self.fin_input = ft.TextField(
             value=str(sug_fin),
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
             keyboard_type=ft.KeyboardType.NUMBER,
+            on_change=lambda e: _refresh_labels(
+                float(self.banca_input.value or 0),
+                float(self.fin_input.value or 0),
+                float(self.fout_input.value or 0),
+            ),
         )
         self.fout_input = ft.TextField(
             value=str(sug_fout),
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
             keyboard_type=ft.KeyboardType.NUMBER,
+            on_change=lambda e: _refresh_labels(
+                float(self.banca_input.value or 0),
+                float(self.fin_input.value or 0),
+                float(self.fout_input.value or 0),
+            ),
         )
-
-        def _on_bank_change(e):
-            try:
-                bk = float(self.banca_input.value or 0)
-                self.fin_input.value  = str(round(bk * 0.000375, 2))
-                self.fout_input.value = str(round(bk * 0.0033, 2))
-                self.fin_input.update()
-                self.fout_input.update()
-            except Exception:
-                pass
-
         self.banca_input = ft.TextField(
-            value=str(self.banca_actual),
+            value=str(sug_bank),
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
             keyboard_type=ft.KeyboardType.NUMBER,
             on_change=_on_bank_change,
@@ -930,9 +1015,9 @@ class LinupApp:
                         self.table_input,
                         ft.Text("BANK:", color=ft.Colors.WHITE),
                         self.banca_input,
-                        ft.Text("CHIP IN (0.0375% bank):", color=ft.Colors.WHITE),
+                        self.fin_label,
                         self.fin_input,
-                        ft.Text("CHIP OUT BASE (0.33% bank):", color=ft.Colors.WHITE),
+                        self.fout_label,
                         self.fout_input,
                         ft.Container(height=10),
                         ft.ElevatedButton(
@@ -954,14 +1039,14 @@ class LinupApp:
             self.nombre_mesa   = str(self.table_input.value).upper() or "TABLE 1"
             self.banca_inicial = float(self.banca_input.value or 100)
             self.banca_actual  = self.banca_inicial
-            self.val_fin       = float(self.fin_input.value)  if self.fin_input.value  else round(self.banca_inicial * 0.000375, 2)
-            self.val_fout      = float(self.fout_input.value) if self.fout_input.value else round(self.banca_inicial * 0.0033, 2)
+            self.val_fin       = float(self.fin_input.value)  if self.fin_input.value  else round(self.banca_inicial / 225, 6)
+            self.val_fout      = float(self.fout_input.value) if self.fout_input.value else round(self.banca_inicial / 26, 4)
         except Exception:
             pass
         self.show_game_screen()
 
     # ─────────────────────────────────────────────────────────────────
-    # STOP LOSS — triggers at 33% loss of initial bank
+    # STOP LOSS — triggers at 45% loss of initial bank
     # ─────────────────────────────────────────────────────────────────
     def _check_stop_loss(self):
         if self.stop_loss_triggered:
@@ -969,7 +1054,7 @@ class LinupApp:
         if self.banca_inicial <= 0:
             return
         loss_pct = (self.banca_inicial - self.banca_actual) / self.banca_inicial
-        if loss_pct < 0.33:
+        if loss_pct < 0.45:
             return
 
         self.stop_loss_triggered = True
@@ -1000,7 +1085,7 @@ class LinupApp:
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 ft.Divider(color='#444444'),
-                ft.Text("33% loss limit reached.", color='#e74c3c',
+                ft.Text("45% loss limit reached.", color='#e74c3c',
                         size=13, text_align=ft.TextAlign.CENTER),
                 ft.Container(height=6),
                 ft.Text(f"Initial bank:  ${self.banca_inicial:.2f}",
@@ -1102,16 +1187,16 @@ class LinupApp:
             self.lbl_inv_pl = ft.Text(
                 f"P/L: {init_pl:+.2f}",
                 color='#2ecc71' if init_pl >= 0 else '#e74c3c',
-                weight=ft.FontWeight.BOLD, size=9,
+                weight=ft.FontWeight.BOLD, size=16,
                 text_align=ft.TextAlign.RIGHT,
             )
             inv_bar_controls = [ft.Container(
                 bgcolor='#0a0a0a',
-                padding=ft.padding.symmetric(horizontal=8, vertical=3),
+                padding=ft.padding.symmetric(horizontal=10, vertical=6),
                 content=ft.Row(controls=[
                     ft.Text(
-                        f"{self.inv_name}  |  Start: ${self.inv_capital:.2f}",
-                        color='#7f8c8d', size=9, weight=ft.FontWeight.BOLD,
+                        self.inv_name,
+                        color='#3498db', size=14, weight=ft.FontWeight.BOLD,
                         expand=True,
                     ),
                     self.lbl_inv_pl,
@@ -1120,25 +1205,19 @@ class LinupApp:
         else:
             self.lbl_inv_pl = None
 
-        mesa_bar = ft.Container(
-            bgcolor='#000000',
-            padding=ft.padding.symmetric(horizontal=8, vertical=4),
-            content=ft.Text(f"  {self.nombre_mesa}", color='#3498db',
-                            weight=ft.FontWeight.BOLD, size=11),
-        )
-
         self.lbl_bank = ft.Text(
-            f"BANK: ${self.banca_actual:.2f}",
-            color='#2ecc71', weight=ft.FontWeight.BOLD, size=14, expand=True,
+            f"{self.nombre_mesa}  |  ${self.banca_actual:.2f}",
+            color='#2ecc71', weight=ft.FontWeight.BOLD, size=13, expand=True,
         )
         self.lbl_inv = ft.Text(
             "BET: $0.00",
-            color='#f1c40f', weight=ft.FontWeight.BOLD, size=14, expand=True,
+            color='#f1c40f', weight=ft.FontWeight.BOLD, size=11, expand=True,
             text_align=ft.TextAlign.CENTER,
+            no_wrap=True,
         )
         self.lbl_pl = ft.Text(
             "P/L: 0.0%",
-            color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=14, expand=True,
+            color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=13, expand=True,
             text_align=ft.TextAlign.RIGHT,
         )
         stats_bar = ft.Container(
@@ -1286,7 +1365,7 @@ class LinupApp:
                 content=ft.Column(
                     expand=True, spacing=0,
                     controls=inv_bar_controls + [
-                        mesa_bar, stats_bar, sug_bar,
+                        stats_bar, sug_bar,
                         mixer_box, ctrl_bar,
                         ft.Container(
                             expand=True,
@@ -1385,7 +1464,8 @@ class LinupApp:
     # ──────────────────────────────────────────────────────────────────
 
     GRUPOS_STRAIGHT = {'Z0', 'ZG', 'ZP', 'H', 'T1', 'T2', 'T3'}
-    PROG_2_OUT = [2, 6, 18, 54, 162, 486]
+    PROG_2_OUT = [2, 6, 18, 54]          # 2 lines/dozens: 1,3,9,27 per line (4 attempts)
+    PROG_2_IN  = [1, 3, 5, 9, 17]        # 2 sectors/zones progression
 
     def _is_outside(self):
         return all(g not in self.GRUPOS_STRAIGHT for g in self.grupos_activos)
@@ -1411,7 +1491,7 @@ class LinupApp:
                 total      = self.val_fout * self.PROG_2_OUT[idx]
                 win_payout = (total / n) * 3
         else:
-            multi      = PROG_FIBO[self.idx_fibo_in] if n == 1 else (3 ** self.nivel_martingala_in)
+            multi      = PROG_FIBO[self.idx_fibo_in] if n == 1 else self.PROG_2_IN[min(self.nivel_martingala_in, len(self.PROG_2_IN) - 1)]
             total      = sum(self._group_cost(g) * multi for g in self.grupos_activos)
             win_payout = self.val_fin * 36 * multi
 
@@ -1513,7 +1593,7 @@ class LinupApp:
         """Show vertical roulette chip placement popup for all active straight groups.
         Calls on_ready_cb() when the user dismisses with READY."""
         grp_count    = len(self.grupos_activos)
-        multi        = PROG_FIBO[self.idx_fibo_in] if grp_count == 1 else 3 ** self.nivel_martingala_in
+        multi        = PROG_FIBO[self.idx_fibo_in] if grp_count == 1 else self.PROG_2_IN[min(self.nivel_martingala_in, len(self.PROG_2_IN) - 1)]
         chip_per_num = self.val_fin * multi
         total_cost, _ = self._compute_bet()   # exact amount that will hit the bank
 
@@ -1660,14 +1740,14 @@ class LinupApp:
         self.lbl_inv.update()
 
     def _check_pre_bet_warning(self, on_confirm):
-        """Show warning if losing this bet would breach 33% stop loss."""
+        """Show warning if losing this bet would breach 45% stop loss."""
         if self.stop_loss_triggered or self.banca_inicial <= 0:
             on_confirm()
             return
         total_cost, _ = self._compute_bet()
         potential_bank = self.banca_actual - total_cost
         loss_pct = (self.banca_inicial - potential_bank) / self.banca_inicial
-        if loss_pct < 0.33:
+        if loss_pct < 0.3:
             on_confirm()
             return
 
@@ -1696,7 +1776,7 @@ class LinupApp:
                 ft.Container(height=4),
                 ft.Text(f"Bank: ${potential_bank:.2f}", color='#e74c3c',
                         size=18, weight=ft.FontWeight.BOLD),
-                ft.Text(f"Loss: {loss_pct*100:.1f}%  (limit 33%)",
+                ft.Text(f"Loss: {loss_pct*100:.1f}%  (limit 45%)",
                         color='#e74c3c', size=13),
             ],
         )
@@ -1822,7 +1902,20 @@ class LinupApp:
             return
         if self.activa or self.grupos_activos:
             total, _ = self._compute_bet()
-            self.lbl_inv.value = f"BET: ${total:.2f}"
+            n      = len(self.grupos_activos)
+            is_out = self._is_outside()
+            if is_out:
+                chip_val  = self.val_fout
+                if n == 1:
+                    num_chips = PROG_FIBO[self.idx_fibo_out]
+                else:
+                    idx       = min(self.nivel_martingala_out, len(self.PROG_2_OUT) - 1)
+                    num_chips = self.PROG_2_OUT[idx]
+            else:
+                chip_val  = self.val_fin
+                multi     = PROG_FIBO[self.idx_fibo_in] if n == 1 else self.PROG_2_IN[min(self.nivel_martingala_in, len(self.PROG_2_IN) - 1)]
+                num_chips = sum(len(GRUPOS_MAESTROS[g]) for g in self.grupos_activos) * multi
+            self.lbl_inv.value = f"BET: ${total:.2f} ({num_chips}x${chip_val:.4g})"
         else:
             self.lbl_inv.value = "BET: $0.00"
 
@@ -1831,7 +1924,7 @@ class LinupApp:
             return
         pl     = self.banca_actual - self.banca_inicial
         pl_pct = (pl / self.banca_inicial * 100) if self.banca_inicial != 0 else 0
-        self.lbl_bank.value = f"BANK: ${self.banca_actual:.2f}"
+        self.lbl_bank.value = f"{self.nombre_mesa}  |  ${self.banca_actual:.2f}"
         self.lbl_pl.value   = f"P/L: {pl_pct:+.1f}%"
         self.lbl_pl.color   = '#2ecc71' if pl >= 0 else '#e74c3c'
         self.update_inv_label()
