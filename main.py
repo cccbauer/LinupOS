@@ -699,17 +699,45 @@ class LinupApp:
     # ──────────────────────────────────────────────────────────────────
     def _build_compound_widget(self, periods: int, start_capital: float, rate: float):
         rate_txt = f"{rate * 100:+.2f}% / session"
+
+        def _cell(text, color, expand, bold=False):
+            return ft.Container(
+                expand=expand,
+                content=ft.Text(
+                    text, color=color, size=14,
+                    text_align=ft.TextAlign.CENTER,
+                    weight=ft.FontWeight.BOLD if bold else ft.FontWeight.NORMAL,
+                ),
+            )
+
+        def _red_cell(text, expand):
+            """Red value with a dark-red background for contrast."""
+            return ft.Container(
+                expand=expand,
+                bgcolor='#3d0000', border_radius=4,
+                padding=ft.padding.symmetric(vertical=1),
+                content=ft.Text(
+                    text, color='#ff4444', size=14,
+                    text_align=ft.TextAlign.CENTER,
+                    weight=ft.FontWeight.BOLD,
+                ),
+            )
+
         header = ft.Row([
-            ft.Text("DAY",     color='#7f8c8d', size=13, expand=1,
-                    text_align=ft.TextAlign.CENTER, weight=ft.FontWeight.BOLD),
-            ft.Text("CAPITAL", color='#7f8c8d', size=13, expand=2,
-                    text_align=ft.TextAlign.CENTER, weight=ft.FontWeight.BOLD),
-            ft.Text("GAIN",    color='#7f8c8d', size=13, expand=2,
-                    text_align=ft.TextAlign.CENTER, weight=ft.FontWeight.BOLD),
-            ft.Text("TOTAL %", color='#7f8c8d', size=13, expand=1,
-                    text_align=ft.TextAlign.CENTER, weight=ft.FontWeight.BOLD),
-        ])
-        data_rows = []
+            _cell("DAY",     '#7f8c8d', 1, bold=True),
+            _cell("CAPITAL", '#7f8c8d', 2, bold=True),
+            _cell("GAIN",    '#7f8c8d', 2, bold=True),
+            _cell("TOTAL %", '#7f8c8d', 1, bold=True),
+        ], spacing=4)
+
+        # Day 0 — starting capital
+        data_rows = [ft.Row([
+            _cell("0",                  '#7f8c8d', 1),
+            _cell(f"${start_capital:.2f}", ft.Colors.WHITE, 2),
+            _cell("—",                  '#7f8c8d', 2),
+            _cell("0.0%",               '#7f8c8d', 1),
+        ], spacing=4)]
+
         cap = start_capital
         for i in range(1, periods + 1):
             new_cap    = cap * (1 + rate)
@@ -717,32 +745,37 @@ class LinupApp:
             total_gain = new_cap - start_capital
             total_pct  = (total_gain / start_capital * 100) if start_capital > 0 else 0.0
             cap        = new_cap
-            c          = '#2ecc71' if gain >= 0 else '#ff4444'
+            positive   = gain >= 0
+            gain_txt   = f"{'+' if positive else ''}{gain:.2f}"
+            pct_txt    = f"{'+' if total_pct >= 0 else ''}{total_pct:.1f}%"
+            if positive:
+                gain_cell = _cell(gain_txt, '#2ecc71', 2)
+                pct_cell  = _cell(pct_txt,  '#2ecc71', 1)
+            else:
+                gain_cell = _red_cell(gain_txt, 2)
+                pct_cell  = _red_cell(pct_txt,  1)
             data_rows.append(ft.Row([
-                ft.Text(str(i),
-                        color=ft.Colors.WHITE, size=13, expand=1,
-                        text_align=ft.TextAlign.CENTER),
-                ft.Text(f"${new_cap:.2f}",
-                        color=ft.Colors.WHITE, size=13, expand=2,
-                        text_align=ft.TextAlign.CENTER),
-                ft.Text(f"{'+' if gain >= 0 else ''}{gain:.2f}",
-                        color=c, size=13, expand=2,
-                        text_align=ft.TextAlign.CENTER),
-                ft.Text(f"{'+' if total_pct >= 0 else ''}{total_pct:.1f}%",
-                        color=c, size=13, expand=1,
-                        text_align=ft.TextAlign.CENTER),
-            ]))
+                _cell(str(i),          ft.Colors.WHITE, 1),
+                _cell(f"${new_cap:.2f}", ft.Colors.WHITE, 2),
+                gain_cell,
+                pct_cell,
+            ], spacing=4))
 
         return ft.Container(
             bgcolor='#1a2535', padding=10, border_radius=8,
             content=ft.Column(
                 [
                     ft.Text(
-                        f"COMPOUND GROWTH — {periods} SESSIONS  ({rate_txt})",
+                        "COMPOUND GROWTH",
                         color='#3498db', size=14, weight=ft.FontWeight.BOLD,
                         text_align=ft.TextAlign.CENTER,
                     ),
-                    ft.Container(height=6),
+                    ft.Text(
+                        f"{periods} SESSIONS  ·  {rate_txt}",
+                        color='#5dade2', size=12,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    ft.Container(height=4),
                     header,
                     ft.Divider(color='#333333', height=1),
                 ] + data_rows,
