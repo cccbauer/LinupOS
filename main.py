@@ -42,7 +42,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v11.5"
+        self.page.title      = "Linup v11.6"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -288,7 +288,7 @@ class LinupApp:
                         ft.Text("Linup", color='#3498db', size=64,
                                 weight=ft.FontWeight.BOLD),
                         ft.Container(height=8),
-                        ft.Text("v11.5", color='#7f8c8d', size=18),
+                        ft.Text("v11.6", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -580,7 +580,7 @@ class LinupApp:
 
                     total = wins + losses
                     eff   = (wins / total * 100) if total > 0 else 0.0
-                    color = '#2ecc71' if (total == 0 or eff >= 50) else '#e74c3c'
+                    color = '#2ecc71' if (total == 0 or eff >= 50) else '#ff4444'
                     if total == 0:
                         txt = f"{mesa_name}  |  ${last_bank:.2f}  |  New"
                     else:
@@ -615,7 +615,7 @@ class LinupApp:
                     # Efficiency = avg per-table W/L ratio across tables that have played
                     played = [(d[2], d[3]) for d in all_tdata if d[2] + d[3] > 0]
                     te     = (sum(w / (w + l) * 100 for w, l in played) / len(played)) if played else 0.0
-                    tc     = '#2ecc71' if total_pl >= 0 else '#e74c3c'
+                    tc     = '#2ecc71' if total_pl >= 0 else '#ff4444'
                     pl_sign  = "+" if total_pl >= 0 else ""
                     pl_pct   = (total_pl / float(inv_capital) * 100) if inv_capital else 0.0
                     eff_txt  = f"EFF: {te:.0f}%  W:{total_wins} L:{total_losses}\n" if played else ""
@@ -628,8 +628,33 @@ class LinupApp:
                             text_align=ft.TextAlign.CENTER,
                         ),
                     ))
+
+                # ── Compound interest section ──────────────────────────
+                num_sessions = total_wins + total_losses
+                per_session_rate = (
+                    (total_pl / float(inv_capital) / num_sessions)
+                    if (num_sessions > 0 and float(inv_capital) > 0) else 0.0
+                )
+                table_rows.append(ft.Container(height=16))
+                table_rows.append(
+                    self._build_compound_widget(7, float(inv_capital), per_session_rate)
+                )
+                table_rows.append(ft.Container(height=6))
+
+                def _open_custom(ev, r=per_session_rate, c=float(inv_capital),
+                                 n=inv_name, iid=investment_id):
+                    self.show_compound_custom_view(iid, n, c, r)
+
+                table_rows.append(
+                    ft.ElevatedButton(
+                        "CUSTOM PERIOD",
+                        on_click=_open_custom,
+                        height=45, expand=True,
+                        style=ft.ButtonStyle(bgcolor='#2980b9', color=ft.Colors.WHITE),
+                    )
+                )
             except Exception as ex:
-                table_rows.append(ft.Text(f"Error: {ex}", color='#e74c3c'))
+                table_rows.append(ft.Text(f"Error: {ex}", color='#ff4444'))
             finally:
                 conn.close()
 
@@ -670,6 +695,124 @@ class LinupApp:
         )
 
     # ──────────────────────────────────────────────────────────────────
+    # COMPOUND INTEREST WIDGET
+    # ──────────────────────────────────────────────────────────────────
+    def _build_compound_widget(self, periods: int, start_capital: float, rate: float):
+        rate_txt = f"{rate * 100:+.2f}% / session"
+        header = ft.Row([
+            ft.Text("DAY",     color='#7f8c8d', size=13, expand=1,
+                    text_align=ft.TextAlign.CENTER, weight=ft.FontWeight.BOLD),
+            ft.Text("CAPITAL", color='#7f8c8d', size=13, expand=2,
+                    text_align=ft.TextAlign.CENTER, weight=ft.FontWeight.BOLD),
+            ft.Text("GAIN",    color='#7f8c8d', size=13, expand=2,
+                    text_align=ft.TextAlign.CENTER, weight=ft.FontWeight.BOLD),
+            ft.Text("TOTAL %", color='#7f8c8d', size=13, expand=1,
+                    text_align=ft.TextAlign.CENTER, weight=ft.FontWeight.BOLD),
+        ])
+        data_rows = []
+        cap = start_capital
+        for i in range(1, periods + 1):
+            new_cap    = cap * (1 + rate)
+            gain       = new_cap - cap
+            total_gain = new_cap - start_capital
+            total_pct  = (total_gain / start_capital * 100) if start_capital > 0 else 0.0
+            cap        = new_cap
+            c          = '#2ecc71' if gain >= 0 else '#ff4444'
+            data_rows.append(ft.Row([
+                ft.Text(str(i),
+                        color=ft.Colors.WHITE, size=13, expand=1,
+                        text_align=ft.TextAlign.CENTER),
+                ft.Text(f"${new_cap:.2f}",
+                        color=ft.Colors.WHITE, size=13, expand=2,
+                        text_align=ft.TextAlign.CENTER),
+                ft.Text(f"{'+' if gain >= 0 else ''}{gain:.2f}",
+                        color=c, size=13, expand=2,
+                        text_align=ft.TextAlign.CENTER),
+                ft.Text(f"{'+' if total_pct >= 0 else ''}{total_pct:.1f}%",
+                        color=c, size=13, expand=1,
+                        text_align=ft.TextAlign.CENTER),
+            ]))
+
+        return ft.Container(
+            bgcolor='#1a2535', padding=10, border_radius=8,
+            content=ft.Column(
+                [
+                    ft.Text(
+                        f"COMPOUND GROWTH — {periods} SESSIONS  ({rate_txt})",
+                        color='#3498db', size=14, weight=ft.FontWeight.BOLD,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    ft.Container(height=6),
+                    header,
+                    ft.Divider(color='#333333', height=1),
+                ] + data_rows,
+                spacing=4, tight=True,
+            ),
+        )
+
+    # ──────────────────────────────────────────────────────────────────
+    # COMPOUND INTEREST — CUSTOM PERIOD VIEW
+    # ──────────────────────────────────────────────────────────────────
+    def show_compound_custom_view(self, investment_id, inv_name: str,
+                                  inv_capital: float, rate: float):
+        periods_field = ft.TextField(
+            value="30",
+            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            expand=True,
+        )
+        result_col = ft.Column([], tight=True)
+
+        def generate(ev=None):
+            try:
+                p = max(1, min(730, int(periods_field.value or 30)))
+            except Exception:
+                p = 30
+            result_col.controls = [self._build_compound_widget(p, inv_capital, rate)]
+            result_col.update()
+
+        def go_back(ev):
+            self.show_investment_dashboard(investment_id)
+
+        self._set_view(
+            ft.Container(
+                bgcolor='#1a1a1a', expand=True, padding=20,
+                content=ft.ListView(
+                    expand=True,
+                    controls=[
+                        ft.ElevatedButton(
+                            "←  BACK", on_click=go_back,
+                            style=ft.ButtonStyle(bgcolor='#c0392b',
+                                                 color=ft.Colors.WHITE),
+                        ),
+                        ft.Container(height=12),
+                        ft.Text(
+                            f"{inv_name}  —  CUSTOM COMPOUND PERIOD",
+                            color='#3498db', size=14, weight=ft.FontWeight.BOLD,
+                        ),
+                        ft.Text(
+                            f"Base: ${inv_capital:.2f}  |  Rate: {rate * 100:+.2f}% / session",
+                            color='#7f8c8d', size=12,
+                        ),
+                        ft.Container(height=10),
+                        ft.Row([
+                            ft.Text("PERIODS:", color=ft.Colors.WHITE),
+                            periods_field,
+                            ft.ElevatedButton(
+                                "GENERATE", on_click=generate,
+                                style=ft.ButtonStyle(bgcolor='#27ae60',
+                                                     color=ft.Colors.WHITE),
+                            ),
+                        ], spacing=8),
+                        ft.Container(height=10),
+                        result_col,
+                    ],
+                ),
+            )
+        )
+        generate()   # auto-generate on open
+
+    # ──────────────────────────────────────────────────────────────────
     # LOAD INVESTMENT
     # ──────────────────────────────────────────────────────────────────
     def show_load_investments(self, e=None):
@@ -700,7 +843,7 @@ class LinupApp:
                             losses += s[1] or 0
                     total    = wins + losses
                     eff      = (wins / total * 100) if total > 0 else 0.0
-                    color    = '#2ecc71' if (total == 0 or eff >= 50) else '#e74c3c'
+                    color    = '#2ecc71' if (total == 0 or eff >= 50) else '#ff4444'
                     n_tables = len(mesa_names)
                     if total > 0:
                         txt = (f"{name}  |  ${capital:.2f}"
@@ -737,7 +880,7 @@ class LinupApp:
                         )
                     )
             except Exception as ex:
-                rows.append(ft.Text(f"Error: {ex}", color='#e74c3c'))
+                rows.append(ft.Text(f"Error: {ex}", color='#ff4444'))
             finally:
                 conn.close()
 
@@ -874,7 +1017,7 @@ class LinupApp:
                 dlg.open = False
                 self.page.update()
 
-            dlg.title = ft.Text("DELETE INVESTMENT", color='#e74c3c',
+            dlg.title = ft.Text("DELETE INVESTMENT", color='#ff4444',
                                 size=16, weight=ft.FontWeight.BOLD,
                                 text_align=ft.TextAlign.CENTER)
             dlg.content = ft.Text(
@@ -889,7 +1032,7 @@ class LinupApp:
                 ),
                 ft.ElevatedButton(
                     "DELETE", on_click=confirm_delete, expand=1,
-                    style=ft.ButtonStyle(bgcolor='#e74c3c', color=ft.Colors.WHITE),
+                    style=ft.ButtonStyle(bgcolor='#ff4444', color=ft.Colors.WHITE),
                 ),
             ]
             dlg.actions_alignment = ft.MainAxisAlignment.CENTER
@@ -952,7 +1095,7 @@ class LinupApp:
             read_only=True,
         )
         sug_bank     = self.banca_actual
-        sug_max_loss = 100.0   # default: 3 losses = 100% bank
+        sug_max_loss = 33.0    # default: 3 losses = 33% bank
         sug_fin      = round(sug_bank * (sug_max_loss / 100) / 225, 6)
         sug_fout     = round(sug_bank * (sug_max_loss / 100) / 26,  4)
 
@@ -1142,7 +1285,7 @@ class LinupApp:
         ok, err_msg    = self._guardar_sesion()
         self._update_table_stats(False)
         guardado_txt   = "Saved to history" if ok else f"Error: {err_msg}"
-        guardado_color = '#2ecc71' if ok else '#e74c3c'
+        guardado_color = '#2ecc71' if ok else '#ff4444'
 
         dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
 
@@ -1153,7 +1296,7 @@ class LinupApp:
 
         dlg.title = ft.Text(
             "STOP LOSS",
-            color='#e74c3c', size=18, weight=ft.FontWeight.BOLD,
+            color='#ff4444', size=18, weight=ft.FontWeight.BOLD,
             text_align=ft.TextAlign.CENTER,
         )
         dlg.content = ft.Column(
@@ -1161,7 +1304,7 @@ class LinupApp:
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 ft.Divider(color='#444444'),
-                ft.Text("45% loss limit reached.", color='#e74c3c',
+                ft.Text("45% loss limit reached.", color='#ff4444',
                         size=13, text_align=ft.TextAlign.CENTER),
                 ft.Container(height=6),
                 ft.Text(f"Initial bank:  ${self.banca_inicial:.2f}",
@@ -1171,7 +1314,7 @@ class LinupApp:
                 ft.Container(height=8),
                 ft.Text(
                     f"P/L:  ${profit:.2f}   ({pl_pct:.1f}%)",
-                    color='#e74c3c', size=20, weight=ft.FontWeight.BOLD,
+                    color='#ff4444', size=20, weight=ft.FontWeight.BOLD,
                 ),
                 ft.Container(height=10),
                 ft.Text(guardado_txt, color=guardado_color, size=13),
@@ -1182,7 +1325,7 @@ class LinupApp:
                 content=ft.Text("CLOSE TABLE", size=15, weight=ft.FontWeight.BOLD),
                 on_click=cerrar,
                 expand=True,
-                style=ft.ButtonStyle(bgcolor='#e74c3c', color=ft.Colors.WHITE),
+                style=ft.ButtonStyle(bgcolor='#ff4444', color=ft.Colors.WHITE),
             )
         ]
         dlg.actions_alignment = ft.MainAxisAlignment.CENTER
@@ -1198,13 +1341,13 @@ class LinupApp:
         profit   = round(self.banca_actual - self.banca_inicial, 2)
         pl_pct   = (profit / self.banca_inicial * 100) if self.banca_inicial != 0 else 0
         positivo = profit >= 0
-        color    = '#2ecc71' if positivo else '#e74c3c'
+        color    = '#2ecc71' if positivo else '#ff4444'
         signo    = "+" if positivo else ""
 
         ok, err_msg    = self._guardar_sesion()
         self._update_table_stats(profit >= 0)
         guardado_txt   = "Saved to history" if ok else f"Error: {err_msg}"
-        guardado_color = '#2ecc71' if ok else '#e74c3c'
+        guardado_color = '#2ecc71' if ok else '#ff4444'
 
         dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
 
@@ -1262,7 +1405,7 @@ class LinupApp:
             init_pl = self.inv_other_pl + (self.banca_actual - self.banca_inicial)
             self.lbl_inv_pl = ft.Text(
                 f"P/L: {init_pl:+.2f}",
-                color='#2ecc71' if init_pl >= 0 else '#e74c3c',
+                color='#2ecc71' if init_pl >= 0 else '#ff4444',
                 weight=ft.FontWeight.BOLD, size=16,
                 text_align=ft.TextAlign.RIGHT,
             )
@@ -1368,7 +1511,7 @@ class LinupApp:
             content=self._txt("FINISH"),
             on_click=self.finalizar_sesion,
             expand=1, height=45,
-            style=ft.ButtonStyle(bgcolor='#e74c3c', color=ft.Colors.WHITE,
+            style=ft.ButtonStyle(bgcolor='#ff4444', color=ft.Colors.WHITE,
                                  animation_duration=400),
         )
         ctrl_bar = ft.Container(
@@ -1818,6 +1961,7 @@ class LinupApp:
         self.btn_inv.update()
         self.update_inv_label()
         self.lbl_inv.update()
+        self.update_ui()   # immediately reflect pending bet in P/L
 
     def _check_pre_bet_warning(self, on_confirm):
         """Show warning if losing this bet would breach 45% stop loss."""
@@ -1854,10 +1998,10 @@ class LinupApp:
                 ft.Divider(color='#444444'),
                 ft.Text("If you lose this bet:", color=ft.Colors.WHITE, size=13),
                 ft.Container(height=4),
-                ft.Text(f"Bank: ${potential_bank:.2f}", color='#e74c3c',
+                ft.Text(f"Bank: ${potential_bank:.2f}", color='#ff4444',
                         size=18, weight=ft.FontWeight.BOLD),
                 ft.Text(f"Loss: {loss_pct*100:.1f}%  (limit 45%)",
-                        color='#e74c3c', size=13),
+                        color='#ff4444', size=13),
             ],
         )
         dlg.actions = [
@@ -2002,16 +2146,20 @@ class LinupApp:
     def update_ui(self):
         if not self.lbl_bank:
             return
-        pl     = self.banca_actual - self.banca_inicial
+        pl = self.banca_actual - self.banca_inicial
+        # When a bet is active, immediately reflect the pending cost in P/L display
+        if self.activa:
+            pending_cost, _ = self._compute_bet()
+            pl -= pending_cost
         pl_pct = (pl / self.banca_inicial * 100) if self.banca_inicial != 0 else 0
         self.lbl_bank.value = f"{self.nombre_mesa}  |  ${self.banca_actual:.2f}"
         self.lbl_pl.value   = f"P/L: {pl_pct:+.1f}%"
-        self.lbl_pl.color   = '#2ecc71' if pl >= 0 else '#e74c3c'
+        self.lbl_pl.color   = '#2ecc71' if pl >= 0 else '#ff4444'
         self.update_inv_label()
         if self.lbl_inv_pl:
             total_pl = self.inv_other_pl + pl
             self.lbl_inv_pl.value = f"P/L: {total_pl:+.2f}"
-            self.lbl_inv_pl.color = '#2ecc71' if total_pl >= 0 else '#e74c3c'
+            self.lbl_inv_pl.color = '#2ecc71' if total_pl >= 0 else '#ff4444'
         self.page.update()
         self._check_stop_loss()
 
