@@ -1866,11 +1866,15 @@ class LinupApp:
             btn.update()
 
     def seleccionar_mixer(self, e):
+        SECTORS = {'Z0', 'ZG', 'ZP', 'H'}
         g = e.control.data['name']
         if g in self.grupos_activos:
             self.grupos_activos.remove(g)
-        elif len(self.grupos_activos) < 2:
-            self.grupos_activos.append(g)
+        else:
+            all_sectors = all(x in SECTORS for x in self.grupos_activos) and g in SECTORS
+            limit = 3 if all_sectors else 2
+            if len(self.grupos_activos) < limit:
+                self.grupos_activos.append(g)
         self._refresh_mixer_colors()
         self.update_inv_label()
         self.lbl_inv.update()
