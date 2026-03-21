@@ -1586,7 +1586,7 @@ class LinupApp:
             spacing=2,
         )
         sug_bar = ft.Container(
-            bgcolor='#2c3e50', padding=4, height=44,
+            bgcolor='#2c3e50', padding=4, height=50,
             content=self.sug_row,
         )
 
@@ -2214,17 +2214,29 @@ class LinupApp:
         n_cats = max(len(cats), 1)
 
         if len(self.sliding_window) < 6:
-            faltan = 6 - len(self.sliding_window)
             self.sug_row.controls = [
                 ft.ElevatedButton(
-                    content=self._txt(f"({faltan} more)", size=12),
-                    expand=True, height=35,
-                    style=ft.ButtonStyle(bgcolor='#34495e', color=ft.Colors.WHITE),
+                    content=self._txt("×", size=16),
+                    expand=True, height=40,
+                    style=ft.ButtonStyle(bgcolor='#34495e', color='#7f8c8d'),
                 )
                 for _ in range(n_cats)
             ]
             self.sug_row.update()
             return
+
+        def _sug_content(label):
+            if '+' in label:
+                a, b = label.split('+', 1)
+                return ft.Column(
+                    [ft.Text(a, size=11, weight=ft.FontWeight.BOLD,
+                             color=ft.Colors.WHITE, text_align=ft.TextAlign.CENTER),
+                     ft.Text(b, size=11, weight=ft.FontWeight.BOLD,
+                             color=ft.Colors.WHITE, text_align=ft.TextAlign.CENTER)],
+                    spacing=0, tight=True,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                )
+            return self._txt(label, size=12)
 
         new_btns = []
         PAIR_BLOQUEADO = {'ZG', 'ZP'}
@@ -2251,8 +2263,8 @@ class LinupApp:
 
             new_btns.append(
                 ft.ElevatedButton(
-                    content=self._txt(label, size=12),
-                    expand=True, height=35,
+                    content=_sug_content(label),
+                    expand=True, height=40,
                     on_click=click,
                     style=ft.ButtonStyle(bgcolor=bg, color=ft.Colors.WHITE),
                 )
