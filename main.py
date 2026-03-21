@@ -1975,7 +1975,9 @@ class LinupApp:
 
         # Color: use first group's color, or blended label if two
         def grp_color(g):
-            return C_SEC if g in {'Z0', 'ZG', 'ZP', 'H'} else C_SET
+            if g in {'Z0', 'ZG', 'ZP', 'H'}: return C_SEC
+            if g in {'W1', 'W2', 'W3'}:       return C_WAV
+            return C_SET
         title_chips = [
             ft.Container(
                 bgcolor=grp_color(g), border_radius=5,
@@ -2200,12 +2202,16 @@ class LinupApp:
         return handler
 
     def actualizar_sugerencias(self):
-        cats = [
-            (['34', '35', '36'], C_COL),
-            (['1a', '2a', '3a'], C_DOC),
-            (['Z0', 'ZG', 'ZP', 'H'], C_SEC),
-            (['T1', 'T2', 'T3'], C_SET),
+        vc = getattr(self, 'visible_cats', {k: True for k in ['cols','docs','secs','thirds','wave']})
+        all_cats = [
+            ('cols',   ['34', '35', '36'],       C_COL),
+            ('docs',   ['1a', '2a', '3a'],        C_DOC),
+            ('secs',   ['Z0', 'ZG', 'ZP', 'H'],  C_SEC),
+            ('thirds', ['T1', 'T2', 'T3'],        C_SET),
+            ('wave',   ['W1', 'W2', 'W3'],        C_WAV),
         ]
+        cats = [(grps, col) for key, grps, col in all_cats if vc.get(key, True)]
+        n_cats = max(len(cats), 1)
 
         if len(self.sliding_window) < 6:
             faltan = 6 - len(self.sliding_window)
@@ -2215,12 +2221,13 @@ class LinupApp:
                     expand=True, height=35,
                     style=ft.ButtonStyle(bgcolor='#34495e', color=ft.Colors.WHITE),
                 )
-                for _ in range(4)
+                for _ in range(n_cats)
             ]
             self.sug_row.update()
             return
 
         new_btns = []
+        PAIR_BLOQUEADO = {'ZG', 'ZP'}
         for grupos, color in cats:
             stats = sorted(
                 [{'g': g,
@@ -2229,11 +2236,10 @@ class LinupApp:
                  for g in grupos],
                 key=lambda x: x['p'], reverse=True,
             )
-            PAIR_BLOQUEADO = {'ZG', 'ZP'}
             g_par_candidato = {stats[0]['g'], stats[1]['g']}
             es_par_bloqueado = g_par_candidato == PAIR_BLOQUEADO
 
-            if stats[1]['p'] > stats[2]['p'] and not es_par_bloqueado:
+            if stats[1]['p'] > stats[2 if len(stats) > 2 else 1]['p'] and not es_par_bloqueado:
                 g_par = [stats[0]['g'], stats[1]['g']]
                 label = f"{g_par[0]}+{g_par[1]}"
                 bg    = color
