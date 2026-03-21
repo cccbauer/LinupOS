@@ -21,9 +21,16 @@ GRUPOS_MAESTROS = {
     'T1': {2, 4, 6, 13, 15, 17, 19, 21, 25, 27, 32, 34},
     'T2': {1, 5, 8, 10, 11, 16, 20, 23, 24, 30, 33, 36},
     'T3': {0, 3, 7, 9, 12, 14, 18, 22, 26, 28, 29, 31, 35},
+    # Wave zones — wheel position relative to 0
+    # W1 Lip:    0 + 6 each side  → 13 numbers
+    'W1': {0, 2, 3, 4, 7, 12, 15, 19, 21, 26, 28, 32, 35},
+    # W2 Curls:  next 6 each side → 12 numbers
+    'W2': {6, 9, 13, 14, 17, 18, 22, 25, 27, 29, 31, 34},
+    # W3 Through: remaining       → 12 numbers
+    'W3': {1, 5, 8, 10, 11, 16, 20, 23, 24, 30, 33, 36},
 }
 PROG_FIBO = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55]
-C_COL, C_DOC, C_SEC, C_SET = '#00d2ff', '#2ecc71', '#e67e22', '#9b59b6'
+C_COL, C_DOC, C_SEC, C_SET, C_WAV = '#00d2ff', '#2ecc71', '#e67e22', '#9b59b6', '#e91e63'
 NUM_COLS = 20
 
 
@@ -43,7 +50,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v11.6"
+        self.page.title      = "Linup v12.0"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -83,8 +90,16 @@ class LinupApp:
     # RESPONSIVE COLUMN WIDTH
     # ──────────────────────────────────────────────────────────────────
     def _col_width(self):
-        w = self.page.width or 360
-        return max(13, int((w - 4) / NUM_COLS))
+        w  = self.page.width or 360
+        vc = getattr(self, 'visible_cats', {k: True for k in ['basic','cols','docs','secs','thirds','wave']})
+        n  = (1
+              + (6 if vc.get('basic',  True) else 0)
+              + (3 if vc.get('cols',   True) else 0)
+              + (3 if vc.get('docs',   True) else 0)
+              + (4 if vc.get('secs',   True) else 0)
+              + (3 if vc.get('thirds', True) else 0)
+              + (3 if vc.get('wave',   True) else 0))
+        return max(11, int((w - 4) / max(n, 1)))
 
     def _on_resize(self, e):
         if self._on_game_screen and self.reg_rows_box is not None:
@@ -258,6 +273,16 @@ class LinupApp:
         self.inv_name             = ""
         self.inv_capital          = 0.0
         self.inv_other_pl         = 0.0
+        # Which column categories are shown in the registration table / mixer
+        if not hasattr(self, 'visible_cats'):
+            self.visible_cats = {
+                'basic':  True,   # R N P I B A
+                'cols':   True,   # 34 35 36
+                'docs':   True,   # 1a 2a 3a
+                'secs':   True,   # Z0 ZG ZP H
+                'thirds': True,   # T1 T2 T3
+                'wave':   True,   # W1 W2 W3
+            }
 
     # ──────────────────────────────────────────────────────────────────
     # NAVIGATION
@@ -289,7 +314,7 @@ class LinupApp:
                         ft.Text("Linup", color='#3498db', size=64,
                                 weight=ft.FontWeight.BOLD),
                         ft.Container(height=8),
-                        ft.Text("v11.6", color='#7f8c8d', size=18),
+                        ft.Text("v12.0", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -1276,6 +1301,27 @@ class LinupApp:
         )
         _fs_ref[0] = free_spin_btn
 
+        vc = self.visible_cats
+        self.cb_basic  = ft.Checkbox(label="Basic  (R N P I B A)", value=vc['basic'],
+                                     fill_color='#555555', check_color=ft.Colors.WHITE,
+                                     label_style=ft.TextStyle(color=ft.Colors.WHITE, size=13))
+        self.cb_cols   = ft.Checkbox(label="Columns  (34 35 36)",  value=vc['cols'],
+                                     fill_color=C_COL, check_color=ft.Colors.WHITE,
+                                     label_style=ft.TextStyle(color=ft.Colors.WHITE, size=13))
+        self.cb_docs   = ft.Checkbox(label="Dozens  (1a 2a 3a)",   value=vc['docs'],
+                                     fill_color=C_DOC, check_color=ft.Colors.WHITE,
+                                     label_style=ft.TextStyle(color=ft.Colors.WHITE, size=13))
+        self.cb_secs   = ft.Checkbox(label="Sectors  (Z0 ZG ZP H)", value=vc['secs'],
+                                     fill_color=C_SEC, check_color=ft.Colors.WHITE,
+                                     label_style=ft.TextStyle(color=ft.Colors.WHITE, size=13))
+        self.cb_thirds = ft.Checkbox(label="Thirds  (T1 T2 T3)",   value=vc['thirds'],
+                                     fill_color=C_SET, check_color=ft.Colors.WHITE,
+                                     label_style=ft.TextStyle(color=ft.Colors.WHITE, size=13))
+        self.cb_wave   = ft.Checkbox(label="Wave  (W1 Lip · W2 Curls · W3 Through)",
+                                     value=vc['wave'],
+                                     fill_color=C_WAV, check_color=ft.Colors.WHITE,
+                                     label_style=ft.TextStyle(color=ft.Colors.WHITE, size=13))
+
         btn_txt = "RESUME TABLE" if is_continue else "OPEN TABLE"
         self._set_view(
             ft.Container(
@@ -1301,6 +1347,15 @@ class LinupApp:
                         self.fout_input,
                         ft.Container(height=10),
                         free_spin_btn,
+                        ft.Container(height=10),
+                        ft.Text("TABLE COLUMNS:", color='#7f8c8d', size=12,
+                                weight=ft.FontWeight.BOLD),
+                        self.cb_basic,
+                        self.cb_cols,
+                        self.cb_docs,
+                        self.cb_secs,
+                        self.cb_thirds,
+                        self.cb_wave,
                         ft.Container(height=6),
                         ft.ElevatedButton(
                             btn_txt, on_click=self.iniciar_ciclo,
@@ -1323,6 +1378,18 @@ class LinupApp:
             self.banca_actual  = self.banca_inicial
             self.val_fin       = float(self.fin_input.value)  if self.fin_input.value  else round(self.banca_inicial / 225, 6)
             self.val_fout      = float(self.fout_input.value) if self.fout_input.value else round(self.banca_inicial / 26, 4)
+        except Exception:
+            pass
+        # Read column visibility checkboxes
+        try:
+            self.visible_cats = {
+                'basic':  bool(self.cb_basic.value),
+                'cols':   bool(self.cb_cols.value),
+                'docs':   bool(self.cb_docs.value),
+                'secs':   bool(self.cb_secs.value),
+                'thirds': bool(self.cb_thirds.value),
+                'wave':   bool(self.cb_wave.value),
+            }
         except Exception:
             pass
         self.show_game_screen()
@@ -1524,12 +1591,15 @@ class LinupApp:
         )
 
         self.mixer_btns = {}
-        cats = [
-            (['34', '35', '36'], C_COL),
-            (['1a', '2a', '3a'], C_DOC),
-            (['Z0', 'ZG', 'ZP', 'H'], C_SEC),
-            (['T1', 'T2', 'T3'], C_SET),
+        vc = self.visible_cats
+        all_cats = [
+            ('cols',   ['34', '35', '36'],      C_COL),
+            ('docs',   ['1a', '2a', '3a'],      C_DOC),
+            ('secs',   ['Z0', 'ZG', 'ZP', 'H'], C_SEC),
+            ('thirds', ['T1', 'T2', 'T3'],      C_SET),
+            ('wave',   ['W1', 'W2', 'W3'],      C_WAV),
         ]
+        cats = [(grps, col) for key, grps, col in all_cats if vc.get(key, True)]
         mixer_rows = []
         for grps, col in cats:
             row_btns = []
@@ -1664,16 +1734,27 @@ class LinupApp:
     # ──────────────────────────────────────────────────────────────────
     # LOG TABLE
     # ──────────────────────────────────────────────────────────────────
+    def _table_specs(self):
+        """Return list of (header, color) pairs based on visible_cats."""
+        vc = getattr(self, 'visible_cats', {k: True for k in ['basic','cols','docs','secs','thirds','wave']})
+        W  = ft.Colors.WHITE
+        specs = [("N", '#f1c40f')]
+        if vc.get('basic',  True): specs += [("R",'#ff4d4d'),("N",W),("P",'#3498db'),("I",'#f39c12'),("B",W),("A",W)]
+        if vc.get('cols',   True): specs += [("34",C_COL),("35",C_COL),("36",C_COL)]
+        if vc.get('docs',   True): specs += [("1a",C_DOC),("2a",C_DOC),("3a",C_DOC)]
+        if vc.get('secs',   True): specs += [("Z0",C_SEC),("ZG",C_SEC),("ZP",C_SEC),("H",C_SEC)]
+        if vc.get('thirds', True): specs += [("T1",C_SET),("T2",C_SET),("T3",C_SET)]
+        if vc.get('wave',   True): specs += [("W1",C_WAV),("W2",C_WAV),("W3",C_WAV)]
+        return specs
+
     def _rebuild_table_header(self):
-        cw = self._col_width()
-        h_list = ["N","R","N","P","I","B","A",
-                  "34","35","36","1a","2a","3a",
-                  "Z0","ZG","ZP","H","T1","T2","T3"]
+        cw    = self._col_width()
+        specs = self._table_specs()
         self.reg_header_row.controls = [
-            ft.Text(h, width=cw, color='#7f8c8d',
+            ft.Text(h, width=cw, color=c,
                     text_align=ft.TextAlign.CENTER,
                     size=7, weight=ft.FontWeight.BOLD)
-            for h in h_list
+            for h, c in specs
         ]
 
     def update_registration_table(self):
@@ -1682,30 +1763,29 @@ class LinupApp:
         cw = self._col_width()
         self._rebuild_table_header()
         self.reg_rows_box.controls.clear()
-        s = "■"
+        vc = getattr(self, 'visible_cats', {k: True for k in ['basic','cols','docs','secs','thirds','wave']})
+        s  = "■"
+        W  = ft.Colors.WHITE
         for n in self.history_nums[-8:]:
-            cells = [
-                (str(n),                                      '#f1c40f'),
-                (s if n in ROJOS else "",                     '#ff4d4d'),
-                (s if (n!=0 and n not in ROJOS) else "",      ft.Colors.WHITE),
-                (s if (n!=0 and n%2==0) else "",              '#3498db'),
-                (s if (n%2!=0) else "",                       '#f39c12'),
-                (s if (1<=n<=18) else "",                     ft.Colors.WHITE),
-                (s if (19<=n<=36) else "",                    ft.Colors.WHITE),
-                (s if n in GRUPOS_MAESTROS['34'] else "",     C_COL),
-                (s if n in GRUPOS_MAESTROS['35'] else "",     C_COL),
-                (s if n in GRUPOS_MAESTROS['36'] else "",     C_COL),
-                (s if n in GRUPOS_MAESTROS['1a'] else "",     C_DOC),
-                (s if n in GRUPOS_MAESTROS['2a'] else "",     C_DOC),
-                (s if n in GRUPOS_MAESTROS['3a'] else "",     C_DOC),
-                (s if n in GRUPOS_MAESTROS['Z0'] else "",     C_SEC),
-                (s if n in GRUPOS_MAESTROS['ZG'] else "",     C_SEC),
-                (s if n in GRUPOS_MAESTROS['ZP'] else "",     C_SEC),
-                (s if n in GRUPOS_MAESTROS['H']  else "",     C_SEC),
-                (s if n in GRUPOS_MAESTROS['T1'] else "",     C_SET),
-                (s if n in GRUPOS_MAESTROS['T2'] else "",     C_SET),
-                (s if n in GRUPOS_MAESTROS['T3'] else "",     C_SET),
-            ]
+            cells = [(str(n), '#f1c40f')]
+            if vc.get('basic', True):
+                cells += [
+                    (s if n in ROJOS else "",                '#ff4d4d'),
+                    (s if (n != 0 and n not in ROJOS) else "", W),
+                    (s if (n != 0 and n % 2 == 0) else "",  '#3498db'),
+                    (s if (n % 2 != 0) else "",              '#f39c12'),
+                    (s if (1 <= n <= 18) else "",            W),
+                    (s if (19 <= n <= 36) else "",           W),
+                ]
+            for key, grps, col in [
+                ('cols',   ['34','35','36'],       C_COL),
+                ('docs',   ['1a','2a','3a'],        C_DOC),
+                ('secs',   ['Z0','ZG','ZP','H'],   C_SEC),
+                ('thirds', ['T1','T2','T3'],        C_SET),
+                ('wave',   ['W1','W2','W3'],        C_WAV),
+            ]:
+                if vc.get(key, True):
+                    cells += [(s if n in GRUPOS_MAESTROS[g] else "", col) for g in grps]
             self.reg_rows_box.controls.append(
                 ft.Row(
                     controls=[
@@ -1745,7 +1825,7 @@ class LinupApp:
     # GAME LOGIC
     # ──────────────────────────────────────────────────────────────────
 
-    GRUPOS_STRAIGHT = {'Z0', 'ZG', 'ZP', 'H', 'T1', 'T2', 'T3'}
+    GRUPOS_STRAIGHT = {'Z0', 'ZG', 'ZP', 'H', 'T1', 'T2', 'T3', 'W1', 'W2', 'W3'}
     PROG_2_OUT = [2, 6, 18, 54]          # 2 lines/dozens: 1,3,9,27 per line (4 attempts)
     PROG_2_IN  = [1, 3, 5, 9, 17]        # 2 sectors/zones progression
 
