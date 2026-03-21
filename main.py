@@ -3,6 +3,7 @@ from collections import deque
 import sqlite3
 import os
 import math
+import random
 from datetime import datetime
 import asyncio
 
@@ -637,13 +638,13 @@ class LinupApp:
                 )
                 table_rows.append(ft.Container(height=16))
                 table_rows.append(
-                    self._build_compound_widget(7, float(inv_capital), per_session_rate)
+                    self._build_compound_widget(7, float(inv_capital), per_session_rate, te)
                 )
                 table_rows.append(ft.Container(height=6))
 
                 def _open_custom(ev, r=per_session_rate, c=float(inv_capital),
-                                 n=inv_name, iid=investment_id):
-                    self.show_compound_custom_view(iid, n, c, r)
+                                 n=inv_name, iid=investment_id, e=te):
+                    self.show_compound_custom_view(iid, n, c, r, e)
 
                 table_rows.append(
                     ft.ElevatedButton(
@@ -697,69 +698,98 @@ class LinupApp:
     # ──────────────────────────────────────────────────────────────────
     # COMPOUND INTEREST WIDGET
     # ──────────────────────────────────────────────────────────────────
-    def _build_compound_widget(self, periods: int, start_capital: float, rate: float):
-        rate_txt = f"{rate * 100:+.2f}% / session"
+    def _build_compound_widget(self, periods: int, start_capital: float,
+                               rate: float, efficiency: float = 0.0):
+        # efficiency: 0–100 (e.g. 70 → 70 % win rate)
+        eff      = max(0.0, min(100.0, efficiency)) / 100.0
+        denom    = 2 * eff - 1
+        # Derive symmetric win/loss rate so that the weighted average == rate
+        r        = (rate / denom) if abs(denom) > 0.01 else abs(rate)
+        r        = abs(r)
 
-        def _cell(text, color, expand, bold=False):
+        # Random W/L sequence matching the efficiency ratio
+        wins_n   = round(periods * eff)
+        losses_n = periods - wins_n
+        wl_seq   = ['W'] * wins_n + ['L'] * losses_n
+        random.shuffle(wl_seq)
+
+        rate_txt = f"{rate * 100:+.2f}% / session  ·  EFF {efficiency:.0f}%"
+
+        def _cell(text, color, expand, bold=False, size=13):
             return ft.Container(
                 expand=expand,
                 content=ft.Text(
-                    text, color=color, size=14,
+                    text, color=color, size=size,
                     text_align=ft.TextAlign.CENTER,
                     weight=ft.FontWeight.BOLD if bold else ft.FontWeight.NORMAL,
                 ),
             )
 
         def _red_cell(text, expand):
-            """Red value with a dark-red background for contrast."""
             return ft.Container(
                 expand=expand,
                 bgcolor='#3d0000', border_radius=4,
                 padding=ft.padding.symmetric(vertical=1),
                 content=ft.Text(
-                    text, color='#ff4444', size=14,
+                    text, color='#ff4444', size=13,
                     text_align=ft.TextAlign.CENTER,
                     weight=ft.FontWeight.BOLD,
                 ),
             )
 
+        def _badge(label, win):
+            return ft.Container(
+                expand=1,
+                bgcolor='#1a3d1a' if win else '#3d0000',
+                border_radius=4,
+                padding=ft.padding.symmetric(vertical=1),
+                content=ft.Text(
+                    label,
+                    color='#2ecc71' if win else '#ff4444',
+                    size=12, weight=ft.FontWeight.BOLD,
+                    text_align=ft.TextAlign.CENTER,
+                ),
+            )
+
         header = ft.Row([
-            _cell("DAY",     '#7f8c8d', 1, bold=True),
+            _cell("DAY",  '#7f8c8d', 1, bold=True),
+            _cell("RES",  '#7f8c8d', 1, bold=True),
             _cell("CAPITAL", '#7f8c8d', 2, bold=True),
             _cell("GAIN",    '#7f8c8d', 2, bold=True),
-            _cell("TOTAL %", '#7f8c8d', 1, bold=True),
-        ], spacing=4)
+            _cell("TOT%",    '#7f8c8d', 1, bold=True),
+        ], spacing=3)
 
         # Day 0 — starting capital
         data_rows = [ft.Row([
-            _cell("0",                  '#7f8c8d', 1),
+            _cell("0",                     '#7f8c8d', 1),
+            _cell("—",                     '#7f8c8d', 1),
             _cell(f"${start_capital:.2f}", ft.Colors.WHITE, 2),
-            _cell("—",                  '#7f8c8d', 2),
-            _cell("0.0%",               '#7f8c8d', 1),
-        ], spacing=4)]
+            _cell("—",                     '#7f8c8d', 2),
+            _cell("0.0%",                  '#7f8c8d', 1),
+        ], spacing=3)]
 
         cap = start_capital
-        for i in range(1, periods + 1):
-            new_cap    = cap * (1 + rate)
-            gain       = new_cap - cap
+        for i, result in enumerate(wl_seq, start=1):
+            win     = (result == 'W')
+            new_cap = cap * (1 + r) if win else cap * (1 - r)
+            gain    = new_cap - cap
             total_gain = new_cap - start_capital
             total_pct  = (total_gain / start_capital * 100) if start_capital > 0 else 0.0
-            cap        = new_cap
-            positive   = gain >= 0
-            gain_txt   = f"{'+' if positive else ''}{gain:.2f}"
-            pct_txt    = f"{'+' if total_pct >= 0 else ''}{total_pct:.1f}%"
-            if positive:
-                gain_cell = _cell(gain_txt, '#2ecc71', 2)
-                pct_cell  = _cell(pct_txt,  '#2ecc71', 1)
-            else:
-                gain_cell = _red_cell(gain_txt, 2)
-                pct_cell  = _red_cell(pct_txt,  1)
+            cap     = new_cap
+
+            gain_txt = f"{'+' if gain >= 0 else ''}{gain:.2f}"
+            pct_txt  = f"{'+' if total_pct >= 0 else ''}{total_pct:.1f}%"
+
+            gain_cell = _cell(gain_txt, '#2ecc71', 2) if win else _red_cell(gain_txt, 2)
+            pct_cell  = _cell(pct_txt,  '#2ecc71', 1) if win else _red_cell(pct_txt,  1)
+
             data_rows.append(ft.Row([
-                _cell(str(i),          ft.Colors.WHITE, 1),
+                _cell(str(i),            ft.Colors.WHITE, 1),
+                _badge(result, win),
                 _cell(f"${new_cap:.2f}", ft.Colors.WHITE, 2),
                 gain_cell,
                 pct_cell,
-            ], spacing=4))
+            ], spacing=3))
 
         return ft.Container(
             bgcolor='#1a2535', padding=10, border_radius=8,
@@ -771,7 +801,7 @@ class LinupApp:
                         text_align=ft.TextAlign.CENTER,
                     ),
                     ft.Text(
-                        f"{periods} SESSIONS  ·  {rate_txt}",
+                        rate_txt,
                         color='#5dade2', size=12,
                         text_align=ft.TextAlign.CENTER,
                     ),
@@ -787,7 +817,7 @@ class LinupApp:
     # COMPOUND INTEREST — CUSTOM PERIOD VIEW
     # ──────────────────────────────────────────────────────────────────
     def show_compound_custom_view(self, investment_id, inv_name: str,
-                                  inv_capital: float, rate: float):
+                                  inv_capital: float, rate: float, efficiency: float = 0.0):
         periods_field = ft.TextField(
             value="30",
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
@@ -801,7 +831,7 @@ class LinupApp:
                 p = max(1, min(730, int(periods_field.value or 30)))
             except Exception:
                 p = 30
-            result_col.controls = [self._build_compound_widget(p, inv_capital, rate)]
+            result_col.controls = [self._build_compound_widget(p, inv_capital, rate, efficiency)]
             result_col.update()
 
         def go_back(ev):
