@@ -347,8 +347,6 @@ class LinupApp:
 
 
     def _set_view(self, content: ft.Control):
-        # Clear any stale dialogs left over from the previous screen
-        self.page.overlay.clear()
         self.root.content = content
         self.page.update()
 
@@ -1145,7 +1143,7 @@ class LinupApp:
 
             def confirm_delete(ev2):
                 dlg.open = False
-                self.page.update()
+                dlg.update()
                 conn3 = self._get_conn()
                 if conn3:
                     try:
@@ -1164,7 +1162,7 @@ class LinupApp:
 
             def cancel_delete(ev2):
                 dlg.open = False
-                self.page.update()
+                dlg.update()
 
             dlg.title = ft.Text("DELETE INVESTMENT", color='#ff4444',
                                 size=16, weight=ft.FontWeight.BOLD,
@@ -1185,9 +1183,7 @@ class LinupApp:
                 ),
             ]
             dlg.actions_alignment = ft.MainAxisAlignment.CENTER
-            self.page.overlay.append(dlg)
-            dlg.open = True
-            self.page.update()
+            self.page.show_dialog(dlg)
 
         table_section = []
         if table_rows_ui:
@@ -1511,7 +1507,7 @@ class LinupApp:
 
         def cerrar(ev):
             dlg.open = False
-            self.page.update()
+            dlg.update()
             self._go_home()
 
         dlg.title = ft.Text(
@@ -1549,10 +1545,7 @@ class LinupApp:
             )
         ]
         dlg.actions_alignment = ft.MainAxisAlignment.CENTER
-
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        self.page.show_dialog(dlg)
 
     # ─────────────────────────────────────────────────────────────────
     # FINALIZE SESSION
@@ -1573,7 +1566,7 @@ class LinupApp:
 
         def cerrar(ev):
             dlg.open = False
-            self.page.update()
+            dlg.update()
             self._go_home()
 
         dlg.title = ft.Text(
@@ -1608,10 +1601,7 @@ class LinupApp:
             )
         ]
         dlg.actions_alignment = ft.MainAxisAlignment.CENTER
-
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        self.page.show_dialog(dlg)
 
     # ──────────────────────────────────────────────────────────────────
     # GAME SCREEN
@@ -2336,11 +2326,11 @@ class LinupApp:
 
         def on_cancel(_ev):
             dlg.open = False
-            self.page.update()
+            dlg.update()
 
         def cerrar(_ev):
             dlg.open = False
-            self.page.update()
+            dlg.update()
             on_ready_cb()
 
         dlg.title = ft.Column(
@@ -2435,9 +2425,7 @@ class LinupApp:
             ),
         ]
         dlg.actions_alignment = ft.MainAxisAlignment.CENTER
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        self.page.show_dialog(dlg)
 
     def _activate_bet(self):
         self.activa = True
@@ -2464,12 +2452,12 @@ class LinupApp:
 
         def continuar(ev):
             dlg.open = False
-            self.page.update()
+            dlg.update()
             on_confirm()
 
         def volver(ev):
             dlg.open = False
-            self.page.update()
+            dlg.update()
 
         dlg.title = ft.Text(
             "WARNING",
@@ -2502,9 +2490,7 @@ class LinupApp:
             ),
         ]
         dlg.actions_alignment = ft.MainAxisAlignment.CENTER
-        self.page.overlay.append(dlg)
-        dlg.open = True
-        self.page.update()
+        self.page.show_dialog(dlg)
 
     def _has_straight(self):
         return any(g in self.GRUPOS_STRAIGHT or g in GRUPOS_LIVE_INSIDE
