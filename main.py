@@ -344,13 +344,7 @@ class LinupApp:
     # ──────────────────────────────────────────────────────────────────
     # NAVIGATION
     # ──────────────────────────────────────────────────────────────────
-    def _close_dlg(self, dlg: ft.AlertDialog):
-        """Mark dialog closed. Caller must call page.update() immediately after
-        so Flet can close it while it is still in the overlay list."""
-        try:
-            dlg.open = False
-        except Exception:
-            pass
+
 
     def _set_view(self, content: ft.Control):
         # Clear any stale dialogs left over from the previous screen
@@ -1150,7 +1144,7 @@ class LinupApp:
             dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
 
             def confirm_delete(ev2):
-                self._close_dlg(dlg)
+                dlg.open = False
                 self.page.update()
                 conn3 = self._get_conn()
                 if conn3:
@@ -1169,7 +1163,7 @@ class LinupApp:
                 self.show_load_investments()
 
             def cancel_delete(ev2):
-                self._close_dlg(dlg)
+                dlg.open = False
                 self.page.update()
 
             dlg.title = ft.Text("DELETE INVESTMENT", color='#ff4444',
@@ -1516,7 +1510,7 @@ class LinupApp:
         dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
 
         def cerrar(ev):
-            self._close_dlg(dlg)
+            dlg.open = False
             self.page.update()
             self._go_home()
 
@@ -1578,7 +1572,7 @@ class LinupApp:
         dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
 
         def cerrar(ev):
-            self._close_dlg(dlg)
+            dlg.open = False
             self.page.update()
             self._go_home()
 
@@ -2341,11 +2335,11 @@ class LinupApp:
         dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
 
         def on_cancel(_ev):
-            self._close_dlg(dlg)
+            dlg.open = False
             self.page.update()
 
         def cerrar(_ev):
-            self._close_dlg(dlg)
+            dlg.open = False
             self.page.update()
             on_ready_cb()
 
@@ -2469,12 +2463,12 @@ class LinupApp:
         dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
 
         def continuar(ev):
-            self._close_dlg(dlg)
+            dlg.open = False
             self.page.update()
             on_confirm()
 
         def volver(ev):
-            self._close_dlg(dlg)
+            dlg.open = False
             self.page.update()
 
         dlg.title = ft.Text(
