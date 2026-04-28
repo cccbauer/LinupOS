@@ -1691,6 +1691,11 @@ class LinupApp:
 
         def _toggle_prog(_e):
             self.prog_on = not self.prog_on
+            if self.prog_on:   # turning ON = fresh start from the beginning
+                self.idx_fibo_out         = 0
+                self.idx_fibo_in          = 0
+                self.nivel_martingala_out = 0
+                self.nivel_martingala_in  = 0
             _refresh_prog_ui()
 
         def _make_multi_handler(mx):
@@ -2066,14 +2071,17 @@ class LinupApp:
         return self.val_fout
 
     def _current_multi(self, is_out: bool) -> int:
-        """Return the active multiplier for outside or inside bets."""
+        """Return per-group multiplier.
+        For outside n>1 with prog ON, PROG_2_OUT stores TOTAL chips, so we
+        divide by n to get the per-group value (consistent with prog OFF)."""
         if not self.prog_on:
             return self.fixed_multi
         n = len(self.grupos_activos)
         if is_out:
             if n == 1:
                 return PROG_FIBO[self.idx_fibo_out]
-            return self.PROG_2_OUT[min(self.nivel_martingala_out, len(self.PROG_2_OUT) - 1)]
+            idx = min(self.nivel_martingala_out, len(self.PROG_2_OUT) - 1)
+            return self.PROG_2_OUT[idx] // max(n, 1)   # per-group: [1,3,9,27] for n=2
         if n == 1:
             return PROG_FIBO[self.idx_fibo_in]
         return self.PROG_2_IN[min(self.nivel_martingala_in, len(self.PROG_2_IN) - 1)]
@@ -2084,14 +2092,14 @@ class LinupApp:
             return 0.0, 0.0
 
         is_out = self._is_outside()
-        multi  = self._current_multi(is_out)
+        multi  = self._current_multi(is_out)   # always per-group
         if is_out:
             if n == 1:
                 total      = self.val_fout * multi
                 win_payout = total * 3
             else:
-                total      = self.val_fout * multi
-                win_payout = (total / n) * 3
+                total      = self.val_fout * multi * n  # 1 chip per group × n groups × multi
+                win_payout = self.val_fout * multi * 3  # one winning group pays 3:1
         else:
             total      = sum(self._group_cost(g) * multi for g in self.grupos_activos)
             win_payout = self.val_fin * 36 * multi
@@ -2680,7 +2688,8 @@ class LinupApp:
             multi  = self._current_multi(is_out)
             if is_out:
                 chip_val  = self.val_fout
-                num_chips = multi
+                n_grp     = len(self.grupos_activos)
+                num_chips = multi * n_grp   # per-group × number of groups
             else:
                 chip_val  = self.val_fin
                 num_chips = sum(len(GRUPOS_MAESTROS[g]) for g in self.grupos_activos) * multi
