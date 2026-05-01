@@ -1070,24 +1070,23 @@ class LinupApp:
 
                 # ── Actual saved sessions (primary view) ───────────────
                 num_sessions = total_wins + total_losses
+
+                # For CHIPS: initial USD capital + USD P/L from mesa rates
+                total_usd_cap = sum(
+                    d[1] * mesa_chip_rate.get(d[0], 0.0) for d in all_tdata
+                ) if db_inv_type == 'CHIPS' else float(inv_capital)
+                total_usd_pl = sum(
+                    (d[4] - d[1]) * mesa_chip_rate.get(d[0], 0.0) for d in all_tdata
+                ) if db_inv_type == 'CHIPS' else total_pl
+
+                proj_capital = total_usd_cap if db_inv_type == 'CHIPS' else float(inv_capital)
                 per_session_rate = (
-                    (total_pl / float(inv_capital) / num_sessions)
-                    if (num_sessions > 0 and float(inv_capital) > 0) else 0.0
+                    (total_usd_pl / proj_capital / num_sessions)
+                    if (num_sessions > 0 and proj_capital > 0) else 0.0
                 )
 
-                # For CHIPS: build mesa → USD-per-chip rate and initial USD capital
-                mesa_usd_rate = {}
-                total_usd_cap = 0.0
-                if db_inv_type == 'CHIPS':
-                    cursor.execute(
-                        "SELECT mesa_name, init_bank, token_price, chips_per_token "
-                        "FROM investment_tables WHERE investment_id=?",
-                        (investment_id,)
-                    )
-                    for _mn, _ib, _tp, _cpt in cursor.fetchall():
-                        _rate = (_tp / _cpt) if _cpt and _cpt > 0 else 0.0
-                        mesa_usd_rate[_mn] = _rate
-                        total_usd_cap += float(_ib) * _rate
+                # mesa_usd_rate reuses mesa_chip_rate (same data, already fetched)
+                mesa_usd_rate = mesa_chip_rate
 
                 cursor.execute(
                     "SELECT session_num, date, mesa, profit, profit_pct "
@@ -1161,8 +1160,8 @@ class LinupApp:
                 ))
 
                 # ── Bottom action buttons ───────────────────────────────
-                def _open_projection(_ev, r=per_session_rate, c=float(inv_capital),
-                                     n=inv_name, iid=investment_id, e=te, it=db_inv_type):
+                def _open_projection(_ev, r=per_session_rate, c=proj_capital,
+                                     n=inv_name, iid=investment_id, e=te, it='FIAT'):
                     self.show_compound_custom_view(iid, n, c, r, e, it)
 
                 def _open_graph(_, c=float(inv_capital),
