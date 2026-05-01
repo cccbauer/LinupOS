@@ -1398,6 +1398,8 @@ class LinupApp:
     # ──────────────────────────────────────────────────────────────────
     def show_actual_graph_view(self, investment_id: int, inv_name: str,
                                inv_capital: float, inv_type: str = 'FIAT'):
+        import flet.canvas as cv
+
         sessions = []
         conn = self._get_conn()
         if conn:
@@ -1449,84 +1451,131 @@ class LinupApp:
                         text_align=ft.TextAlign.CENTER)
             )
         else:
-            yvals = [p[1] for p in pts]
-            pad   = max((max(yvals) - min(yvals)) * 0.12, abs(inv_capital * 0.05), 1.0)
-            min_y = min(yvals) - pad
-            max_y = max(yvals) + pad
-            max_x = float(len(pts) - 1)
-
-            # Y-axis: 5 evenly-spaced labels
+            yvals  = [p[1] for p in pts]
+            pad    = max((max(yvals) - min(yvals)) * 0.12, abs(inv_capital * 0.05), 1.0)
+            min_y  = min(yvals) - pad
+            max_y  = max(yvals) + pad
             y_span = max_y - min_y
-            y_labels = [
-                ft.ChartAxisLabel(
-                    value=min_y + i * y_span / 4,
-                    label=ft.Container(
-                        content=ft.Text(_fv(min_y + i * y_span / 4),
-                                        size=8, color='#aaaaaa'),
-                        padding=ft.padding.only(right=4),
-                    ),
-                )
-                for i in range(5)
-            ]
-
-            # X-axis: up to 6 labels
-            step = max(1, round(max_x / 5))
-            x_labels = [
-                ft.ChartAxisLabel(
-                    value=float(i),
-                    label=ft.Container(
-                        content=ft.Text(str(i), size=8, color='#aaaaaa'),
-                        padding=ft.padding.only(top=4),
-                    ),
-                )
-                for i in range(0, len(pts), step)
-            ]
-
+            max_xi = len(pts) - 1
             line_color = '#2ecc71' if running >= inv_capital else '#ff4444'
 
-            chart = ft.LineChart(
-                data_series=[
-                    ft.LineChartData(
-                        data_points=[ft.LineChartDataPoint(x=float(x), y=y)
-                                     for x, y in pts],
-                        color=line_color,
-                        stroke_width=2,
-                        curved=False,
-                        below_line_bgcolor=f"{line_color}22",
-                    ),
-                    # break-even reference
-                    ft.LineChartData(
-                        data_points=[
-                            ft.LineChartDataPoint(x=0.0, y=inv_capital),
-                            ft.LineChartDataPoint(x=max_x, y=inv_capital),
-                        ],
-                        color='#555555',
-                        stroke_width=1,
-                        dash_pattern=[4, 4],
-                    ),
-                ],
-                left_axis=ft.ChartAxis(labels=y_labels, labels_size=62),
-                bottom_axis=ft.ChartAxis(labels=x_labels, labels_size=22),
-                horizontal_grid_lines=ft.ChartGridLines(
-                    interval=y_span / 4, color='#333333', width=1),
-                vertical_grid_lines=ft.ChartGridLines(
-                    interval=step, color='#2a2a2a', width=1),
-                min_x=0.0, max_x=max_x,
-                min_y=min_y, max_y=max_y,
-                bgcolor='#1a2535',
-                border=ft.border.only(
-                    bottom=ft.border.BorderSide(1, '#444444'),
-                    left=ft.border.BorderSide(1, '#444444'),
-                ),
-                height=300,
+            # Canvas layout constants (px)
+            ML, MR, MT, MB = 62, 8, 8, 22
+            CH = 270  # total canvas height
+
+            def _build_shapes(cw):
+                pw = max(cw - ML - MR, 1.0)
+                ph = float(CH - MT - MB)
+
+                def sx(xi): return ML + (xi / max_xi) * pw if max_xi else ML
+                def sy(yv): return MT + (1.0 - (yv - min_y) / y_span) * ph
+
+                shapes = []
+
+                # Background
+                shapes.append(cv.Rect(
+                    x=ML, y=MT, width=pw, height=ph,
+                    paint=ft.Paint(color='#1a2535',
+                                   style=ft.PaintingStyle.FILL)
+                ))
+
+                # Horizontal grid lines + Y labels
+                for i in range(5):
+                    gy  = MT + i * ph / 4
+                    val = max_y - i * y_span / 4
+                    shapes.append(cv.Line(
+                        x1=ML, y1=gy, x2=ML + pw, y2=gy,
+                        paint=ft.Paint(color='#2a2a2a', stroke_width=1)
+                    ))
+                    shapes.append(cv.Text(
+                        x=0, y=gy - 6,
+                        text=_fv(val),
+                        style=ft.TextStyle(color='#888888', size=8),
+                    ))
+
+                # Break-even dashed line
+                bey = sy(inv_capital)
+                if MT <= bey <= MT + ph:
+                    x = ML
+                    while x < ML + pw:
+                        shapes.append(cv.Line(
+                            x1=x, y1=bey,
+                            x2=min(x + 4, ML + pw), y2=bey,
+                            paint=ft.Paint(color='#666666', stroke_width=1)
+                        ))
+                        x += 8
+
+                # Fill under data line
+                fill = [cv.Path.MoveTo(x=sx(pts[0][0]), y=sy(pts[0][1]))]
+                for xi, yi in pts[1:]:
+                    fill.append(cv.Path.LineTo(x=sx(xi), y=sy(yi)))
+                fill.append(cv.Path.LineTo(x=sx(pts[-1][0]), y=MT + ph))
+                fill.append(cv.Path.LineTo(x=sx(0), y=MT + ph))
+                fill.append(cv.Path.Close())
+                shapes.append(cv.Path(
+                    elements=fill,
+                    paint=ft.Paint(color=line_color + '33',
+                                   style=ft.PaintingStyle.FILL)
+                ))
+
+                # Data line
+                line = [cv.Path.MoveTo(x=sx(pts[0][0]), y=sy(pts[0][1]))]
+                for xi, yi in pts[1:]:
+                    line.append(cv.Path.LineTo(x=sx(xi), y=sy(yi)))
+                shapes.append(cv.Path(
+                    elements=line,
+                    paint=ft.Paint(color=line_color, stroke_width=2,
+                                   style=ft.PaintingStyle.STROKE)
+                ))
+
+                # Dots (only when few sessions)
+                if len(pts) <= 25:
+                    for xi, yi in pts:
+                        shapes.append(cv.Circle(
+                            x=sx(xi), y=sy(yi), radius=3,
+                            paint=ft.Paint(color=line_color,
+                                           style=ft.PaintingStyle.FILL)
+                        ))
+
+                # X-axis labels
+                x_step = max(1, round(max_xi / 5))
+                for i in range(0, len(pts), x_step):
+                    shapes.append(cv.Text(
+                        x=sx(i) - 4, y=MT + ph + 4,
+                        text=str(i),
+                        style=ft.TextStyle(color='#888888', size=8),
+                    ))
+
+                # Axes border
+                shapes.append(cv.Line(
+                    x1=ML, y1=MT, x2=ML, y2=MT + ph,
+                    paint=ft.Paint(color='#444444', stroke_width=1)
+                ))
+                shapes.append(cv.Line(
+                    x1=ML, y1=MT + ph, x2=ML + pw, y2=MT + ph,
+                    paint=ft.Paint(color='#444444', stroke_width=1)
+                ))
+
+                return shapes
+
+            canvas_ctrl = cv.Canvas(
+                shapes=[],
                 expand=True,
-                tooltip_bgcolor='#2c2c2c',
+                height=CH,
+                resize_interval=0,
+                on_resize=lambda e: (
+                    setattr(canvas_ctrl, 'shapes', _build_shapes(e.width))
+                    or canvas_ctrl.update()
+                ),
             )
 
             controls.append(
-                ft.Container(bgcolor='#1a2535', border_radius=8,
-                             padding=ft.padding.only(top=10, right=10, bottom=4),
-                             content=chart)
+                ft.Container(
+                    bgcolor='#0d0d0d', border_radius=8,
+                    padding=0,
+                    content=canvas_ctrl,
+                    height=CH,
+                )
             )
 
             # Summary bar
