@@ -1363,8 +1363,8 @@ class LinupApp:
             if val <= 0:
                 return 0.0
             if val < 10:
-                return math.ceil(round(val * 10, 8)) / 10
-            return float(math.ceil(val / 10) * 10)
+                return math.floor(round(val * 10, 8)) / 10
+            return float(math.floor(val / 10) * 10)
 
         sug_fin  = _round_up_chip(sug_bank * (sug_max_loss / 100) / 225)
         sug_fout = sug_fin * 10
