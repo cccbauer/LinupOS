@@ -971,15 +971,22 @@ class LinupApp:
                     inv_name, inv_capital, db_inv_type = row[0], row[1], (row[2] or 'FIAT')
 
                 cursor.execute(
-                    "SELECT mesa_name, init_bank FROM investment_tables "
+                    "SELECT mesa_name, init_bank, token_price, chips_per_token "
+                    "FROM investment_tables "
                     "WHERE investment_id=? ORDER BY id",
                     (investment_id,)
                 )
                 inv_tables = cursor.fetchall()
 
+                # usd_per_chip for each mesa (used for CHIPS display)
+                mesa_chip_rate = {
+                    row[0]: ((row[2] / row[3]) if row[3] and row[3] > 0 else 0.0)
+                    for row in inv_tables
+                }
+
                 # Collect all table data first so we can compute per-table other_pl
                 all_tdata = []  # (mesa_name, init_bank, wins, losses, last_bank)
-                for mesa_name, init_bank in inv_tables:
+                for mesa_name, init_bank, _tp, _cpt in inv_tables:
                     cursor.execute(
                         "SELECT wins, losses, last_bank FROM table_stats "
                         "WHERE investment_id=? AND mesa=?",
@@ -1004,8 +1011,11 @@ class LinupApp:
                     total = wins + losses
                     eff   = (wins / total * 100) if total > 0 else 0.0
                     color = '#2ecc71' if (total == 0 or eff >= 50) else '#ff4444'
-                    bk_fmt = (f"{int(round(last_bank)):,}" if db_inv_type == 'CHIPS'
-                              else f"${last_bank:.2f}")
+                    if db_inv_type == 'CHIPS':
+                        usd_val = last_bank * mesa_chip_rate.get(mesa_name, 0.0)
+                        bk_fmt = f"{int(round(last_bank)):,} (${usd_val:.2f})"
+                    else:
+                        bk_fmt = f"${last_bank:.2f}"
                     if total == 0:
                         txt = f"{mesa_name}  |  {bk_fmt}  |  New"
                     else:
