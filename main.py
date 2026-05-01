@@ -102,7 +102,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v15.0"
+        self.page.title      = "Linup v15.1"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -430,7 +430,7 @@ class LinupApp:
                         ft.Text("Linup", color='#3498db', size=64,
                                 weight=ft.FontWeight.BOLD),
                         ft.Container(height=8),
-                        ft.Text("v15.0", color='#7f8c8d', size=18),
+                        ft.Text("v15.1", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -1358,8 +1358,16 @@ class LinupApp:
         )
         sug_bank     = self.banca_actual
         sug_max_loss = 33.0    # default: 3 losses = 33% bank
-        sug_fin      = round(sug_bank * (sug_max_loss / 100) / 225, 6)
-        sug_fout     = round(sug_bank * (sug_max_loss / 100) / 26,  4)
+
+        def _round_up_chip(val):
+            if val <= 0:
+                return 0.0
+            if val < 10:
+                return math.ceil(round(val * 10, 8)) / 10
+            return float(math.ceil(val / 10) * 10)
+
+        sug_fin  = _round_up_chip(sug_bank * (sug_max_loss / 100) / 225)
+        sug_fout = _round_up_chip(sug_bank * (sug_max_loss / 100) / 26)
 
         def _f(val):
             try:
@@ -1370,7 +1378,7 @@ class LinupApp:
         def _chips_from(bk, loss_pct):
             """Return (fin, fout) given bank and max-loss %."""
             factor = bk * max(loss_pct, 0) / 100
-            return round(factor / 225, 6), round(factor / 26, 4)
+            return _round_up_chip(factor / 225), _round_up_chip(factor / 26)
 
         def _chip_label_text(chip_val, bank, multiplier_sum, max_loss_pct):
             """chip_val × multiplier_sum = total 3-loss cost; % relative to bank"""
