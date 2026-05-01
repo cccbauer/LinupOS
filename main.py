@@ -102,7 +102,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v15.3"
+        self.page.title      = "Linup v15.4"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -483,7 +483,7 @@ class LinupApp:
                         ft.Text("Linup", color='#3498db', size=64,
                                 weight=ft.FontWeight.BOLD),
                         ft.Container(height=8),
-                        ft.Text("v15.3", color='#7f8c8d', size=18),
+                        ft.Text("v15.4", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -726,36 +726,44 @@ class LinupApp:
                 for sym, lbl, _ in self._TOKENS
             ]
 
+            _tf_dark = dict(bgcolor='#3a3a3a', color=ft.Colors.WHITE,
+                            label_style=ft.TextStyle(color='#aaaaaa'))
+
             for i in range(num_tables):
                 token_dd = ft.Dropdown(
                     options=dd_options,
                     value='SOL',
-                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
-                    height=50,
+                    bgcolor='#3a3a3a',
+                    color=ft.Colors.WHITE,
+                    border_color='#555555',
+                    focused_border_color='#f39c12',
+                    text_style=ft.TextStyle(color=ft.Colors.WHITE, size=14),
+                    hint_style=ft.TextStyle(color='#aaaaaa'),
                 )
                 bal_f = ft.TextField(
                     value="0", label="Token balance",
-                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
-                    keyboard_type=ft.KeyboardType.NUMBER,
+                    height=45, keyboard_type=ft.KeyboardType.NUMBER,
+                    **_tf_dark,
                 )
                 price_f = ft.TextField(
                     value="0", label="Price (USD)  –  editable",
-                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
-                    keyboard_type=ft.KeyboardType.NUMBER,
+                    height=45, keyboard_type=ft.KeyboardType.NUMBER,
+                    **_tf_dark,
                 )
                 cc_f = ft.TextField(
                     value="10", label="Credits",
-                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
-                    keyboard_type=ft.KeyboardType.NUMBER, expand=1,
+                    height=45, keyboard_type=ft.KeyboardType.NUMBER,
+                    expand=1, **_tf_dark,
                 )
                 ct_f = ft.TextField(
                     value="0.0004", label="= tokens",
-                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
-                    keyboard_type=ft.KeyboardType.NUMBER, expand=1,
+                    height=45, keyboard_type=ft.KeyboardType.NUMBER,
+                    expand=1, **_tf_dark,
                 )
                 chip_lbl   = ft.Text("0 chips  |  $0.00", color='#f1c40f',
                                      size=13, weight=ft.FontWeight.BOLD)
-                status_lbl = ft.Text("", color='#7f8c8d', size=11)
+                status_lbl = ft.Text("Select a token to fetch price",
+                                     color='#7f8c8d', size=11)
 
                 def _make_updater(bf, pf, ccf, ctf, clbl):
                     def update(_=None):
@@ -783,27 +791,22 @@ class LinupApp:
                 ct_f.on_change    = upd
 
                 def _make_dd_handler(dd, pf, slbl, upd_fn):
-                    def on_change(_):
+                    async def _fetch_and_update():
                         sym = dd.value or 'SOL'
                         slbl.value = f"Fetching {sym}…"
-                        try:
-                            slbl.update()
-                        except Exception:
-                            pass
-                        async def do():
-                            price = await self._fetch_token_price(sym)
-                            if price > 0:
-                                pf.value = str(price)
-                                slbl.value = f"✓ {sym} = ${price:,.4f}"
-                            else:
-                                slbl.value = "Could not fetch — enter price manually"
-                            try:
-                                pf.update()
-                                slbl.update()
-                            except Exception:
-                                pass
-                            upd_fn()
-                        self.page.run_task(do)
+                        self.page.update()
+                        price = await self._fetch_token_price(sym)
+                        if price > 0:
+                            pf.value  = str(price)
+                            slbl.value = f"✓  {sym}  =  ${price:,.4f}"
+                        else:
+                            slbl.value = "Could not fetch — enter price manually"
+                        self.page.update()
+                        upd_fn()
+
+                    def on_change(_):
+                        self.page.run_task(_fetch_and_update)
+
                     return on_change
 
                 token_dd.on_change = _make_dd_handler(token_dd, price_f, status_lbl, upd)
