@@ -102,18 +102,21 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v15.5"
+        self.page.title      = "Linup v15.6"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
         self.page.scroll     = None
         self.page.on_resized = self._on_resize
 
-        # macOS window settings
-        self.page.window.width      = 420
-        self.page.window.height     = 860
-        self.page.window.min_width  = 380
-        self.page.window.min_height = 700
+        # Desktop-only window sizing (Android/iOS fill screen natively)
+        _mobile = self.page.platform in (
+            ft.PagePlatform.ANDROID, ft.PagePlatform.IOS)
+        if not _mobile:
+            self.page.window.width      = 420
+            self.page.window.height     = 860
+            self.page.window.min_width  = 380
+            self.page.window.min_height = 700
 
         self.root = ft.Container(expand=True, bgcolor='#1a1a1a')
         self.page.add(self.root)
@@ -746,6 +749,7 @@ class LinupApp:
                 token_dd = ft.Dropdown(
                     options=dd_options,
                     value='SOL',
+                    expand=True,
                     bgcolor='#3a3a3a',
                     color=ft.Colors.WHITE,
                     border_color='#555555',
@@ -761,7 +765,7 @@ class LinupApp:
                 price_f = ft.TextField(
                     value="0", label="Price (USD)  –  editable",
                     height=45, keyboard_type=ft.KeyboardType.NUMBER,
-                    **_tf_dark,
+                    expand=True, **_tf_dark,
                 )
                 cc_f = ft.TextField(
                     value="10", label="Credits",
@@ -827,7 +831,7 @@ class LinupApp:
 
                 fetch_btn = ft.ElevatedButton(
                     "GET PRICE", on_click=fetch_handler,
-                    height=45,
+                    height=45, width=110,
                     style=ft.ButtonStyle(bgcolor='#2980b9', color=ft.Colors.WHITE),
                 )
 
