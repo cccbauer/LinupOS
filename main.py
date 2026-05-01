@@ -102,7 +102,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v15.4"
+        self.page.title      = "Linup v15.5"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -432,21 +432,34 @@ class LinupApp:
 
     async def _fetch_token_price(self, symbol: str) -> float:
         import urllib.request, json, ssl
-        token = next((t for t in self._TOKENS if t[0] == symbol.upper()), None)
+        sym = symbol.upper()
+        # Stablecoins — no network call needed
+        token = next((t for t in self._TOKENS if t[0] == sym), None)
         if token and token[2] is None:
-            return 1.0   # stablecoin
-        coin_id = token[2] if token else symbol.lower()
-        url = (f"https://api.coingecko.com/api/v3/simple/price"
-               f"?ids={coin_id}&vs_currencies=usd")
+            return 1.0
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode    = ssl.CERT_NONE
+        loop = asyncio.get_running_loop()
+        # Primary: Binance spot price (SYMBOLUSDT pair)
         try:
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode    = ssl.CERT_NONE
-            loop = asyncio.get_running_loop()
-            def _get():
+            url = f"https://api.binance.com/api/v3/ticker/price?symbol={sym}USDT"
+            def _binance():
+                with urllib.request.urlopen(url, timeout=6, context=ctx) as r:
+                    return json.loads(r.read())
+            data = await loop.run_in_executor(None, _binance)
+            return float(data['price'])
+        except Exception:
+            pass
+        # Fallback: CoinGecko
+        try:
+            coin_id = token[2] if token else sym.lower()
+            url = (f"https://api.coingecko.com/api/v3/simple/price"
+                   f"?ids={coin_id}&vs_currencies=usd")
+            def _coingecko():
                 with urllib.request.urlopen(url, timeout=8, context=ctx) as r:
                     return json.loads(r.read())
-            data = await loop.run_in_executor(None, _get)
+            data = await loop.run_in_executor(None, _coingecko)
             return float(data[coin_id]['usd'])
         except Exception:
             return 0.0
@@ -483,7 +496,7 @@ class LinupApp:
                         ft.Text("Linup", color='#3498db', size=64,
                                 weight=ft.FontWeight.BOLD),
                         ft.Container(height=8),
-                        ft.Text("v15.4", color='#7f8c8d', size=18),
+                        ft.Text("v15.5", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -790,26 +803,33 @@ class LinupApp:
                 cc_f.on_change    = upd
                 ct_f.on_change    = upd
 
-                def _make_dd_handler(dd, pf, slbl, upd_fn):
-                    async def _fetch_and_update():
+                def _make_fetch_handler(dd, pf, slbl, upd_fn):
+                    async def _do_fetch():
                         sym = dd.value or 'SOL'
                         slbl.value = f"Fetching {sym}…"
                         self.page.update()
                         price = await self._fetch_token_price(sym)
                         if price > 0:
-                            pf.value  = str(price)
+                            pf.value   = str(price)
                             slbl.value = f"✓  {sym}  =  ${price:,.4f}"
                         else:
                             slbl.value = "Could not fetch — enter price manually"
                         self.page.update()
                         upd_fn()
 
-                    def on_change(_):
-                        self.page.run_task(_fetch_and_update)
+                    def trigger(_):
+                        self.page.run_task(_do_fetch)
 
-                    return on_change
+                    return trigger
 
-                token_dd.on_change = _make_dd_handler(token_dd, price_f, status_lbl, upd)
+                fetch_handler = _make_fetch_handler(token_dd, price_f, status_lbl, upd)
+                token_dd.on_change = fetch_handler
+
+                fetch_btn = ft.ElevatedButton(
+                    "GET PRICE", on_click=fetch_handler,
+                    height=45,
+                    style=ft.ButtonStyle(bgcolor='#2980b9', color=ft.Colors.WHITE),
+                )
 
                 chip_rows_refs.append((token_dd, bal_f, price_f, cc_f, ct_f))
                 rows.append(ft.Container(
@@ -820,7 +840,7 @@ class LinupApp:
                         token_dd,
                         status_lbl,
                         bal_f,
-                        price_f,
+                        ft.Row(controls=[price_f, fetch_btn], spacing=6),
                         ft.Text("Conversion  (credits = tokens)",
                                 color='#7f8c8d', size=11),
                         ft.Row(controls=[cc_f, ct_f], spacing=6),
