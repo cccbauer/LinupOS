@@ -406,6 +406,7 @@ class LinupApp:
         self.inv_name             = ""
         self.inv_capital          = 0.0
         self.inv_other_pl         = 0.0
+        self.inv_type             = 'FIAT'
         # Which column categories are shown in the registration table / mixer
         if not hasattr(self, 'visible_cats'):
             self.visible_cats = {
@@ -416,6 +417,11 @@ class LinupApp:
                 'thirds': True,   # T1 T2 T3
                 'wave':   True,   # W1 W2 W3
             }
+
+    def _fmt_bank(self, val: float) -> str:
+        if self.inv_type == 'CHIPS':
+            return f"{int(round(val)):,}"
+        return f"${val:.2f}"
 
     # ──────────────────────────────────────────────────────────────────
     # CRYPTO PRICE FETCH  (CoinGecko free API, no key required)
@@ -956,12 +962,13 @@ class LinupApp:
             try:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT name, capital FROM investments WHERE id=?",
+                    "SELECT name, capital, inv_type FROM investments WHERE id=?",
                     (investment_id,)
                 )
                 row = cursor.fetchone()
+                db_inv_type = 'FIAT'
                 if row:
-                    inv_name, inv_capital = row
+                    inv_name, inv_capital, db_inv_type = row[0], row[1], (row[2] or 'FIAT')
 
                 cursor.execute(
                     "SELECT mesa_name, init_bank FROM investment_tables "
@@ -997,19 +1004,22 @@ class LinupApp:
                     total = wins + losses
                     eff   = (wins / total * 100) if total > 0 else 0.0
                     color = '#2ecc71' if (total == 0 or eff >= 50) else '#ff4444'
+                    bk_fmt = (f"{int(round(last_bank)):,}" if db_inv_type == 'CHIPS'
+                              else f"${last_bank:.2f}")
                     if total == 0:
-                        txt = f"{mesa_name}  |  ${last_bank:.2f}  |  New"
+                        txt = f"{mesa_name}  |  {bk_fmt}  |  New"
                     else:
-                        txt = (f"{mesa_name}  |  ${last_bank:.2f}"
+                        txt = (f"{mesa_name}  |  {bk_fmt}"
                                f"  |  W:{wins} L:{losses}  |  {eff:.0f}%")
 
-                    def make_loader(m, bk, has_hist, opl):
+                    def make_loader(m, bk, has_hist, opl, itype=db_inv_type):
                         def loader(ev):
                             self.reset_variables()
                             self.current_investment_id = investment_id
                             self.inv_name      = inv_name
                             self.inv_capital   = float(inv_capital)
                             self.inv_other_pl  = opl
+                            self.inv_type      = itype
                             self.nombre_mesa   = str(m)
                             self.banca_inicial = float(bk)
                             self.banca_actual  = float(bk)
@@ -1039,7 +1049,10 @@ class LinupApp:
                         bgcolor='#1e2d1e' if total_pl >= 0 else '#2d1e1e',
                         padding=10, margin=ft.margin.only(bottom=4),
                         content=ft.Text(
-                            f"{eff_txt}${total_bank:.2f}  |  P/L: {pl_sign}${total_pl:.2f} ({pl_sign}{pl_pct:.1f}%)",
+                            f"{eff_txt}"
+                            + (f"{int(round(total_bank)):,}  |  P/L: {pl_sign}{int(round(total_pl)):,} ({pl_sign}{pl_pct:.1f}%)"
+                               if db_inv_type == 'CHIPS'
+                               else f"${total_bank:.2f}  |  P/L: {pl_sign}${total_pl:.2f} ({pl_sign}{pl_pct:.1f}%)"),
                             color=tc, size=13, weight=ft.FontWeight.BOLD,
                             text_align=ft.TextAlign.CENTER,
                         ),
@@ -1066,6 +1079,10 @@ class LinupApp:
                 ]
                 if saved_sessions:
                     running = float(inv_capital)
+                    def _fs(v):  # format session value
+                        if db_inv_type == 'CHIPS':
+                            return f"{int(round(v)):,}"
+                        return f"${v:.2f}"
                     for s_num, s_date, s_mesa, s_profit, s_pct in saved_sessions:
                         running += s_profit
                         sign = "+" if s_profit >= 0 else ""
@@ -1080,7 +1097,7 @@ class LinupApp:
                                             size=10, width=90),
                                     ft.Text(s_mesa, color=ft.Colors.WHITE,
                                             size=10, expand=True),
-                                    ft.Text(f"{sign}${s_profit:.2f} ({sign}{s_pct:.1f}%)",
+                                    ft.Text(f"{sign}{_fs(s_profit)} ({sign}{s_pct:.1f}%)",
                                             color=col, size=10,
                                             weight=ft.FontWeight.BOLD),
                                 ], spacing=6),
@@ -1095,7 +1112,7 @@ class LinupApp:
                             padding=ft.padding.symmetric(horizontal=8, vertical=5),
                             margin=ft.margin.only(top=4),
                             content=ft.Text(
-                                f"Running total: ${running:.2f}  ({run_sign}${run_diff:.2f})",
+                                f"Running total: {_fs(running)}  ({run_sign}{_fs(run_diff)})",
                                 color=run_col, size=11, weight=ft.FontWeight.BOLD,
                                 text_align=ft.TextAlign.CENTER,
                             ),
@@ -1116,8 +1133,8 @@ class LinupApp:
 
                 # ── Compound growth projection button ──────────────────
                 def _open_projection(_ev, r=per_session_rate, c=float(inv_capital),
-                                     n=inv_name, iid=investment_id, e=te):
-                    self.show_compound_custom_view(iid, n, c, r, e)
+                                     n=inv_name, iid=investment_id, e=te, it=db_inv_type):
+                    self.show_compound_custom_view(iid, n, c, r, e, it)
 
                 table_rows.append(ft.Container(height=6))
                 table_rows.append(
@@ -1174,7 +1191,8 @@ class LinupApp:
     # COMPOUND INTEREST WIDGET
     # ──────────────────────────────────────────────────────────────────
     def _build_compound_widget(self, periods: int, start_capital: float,
-                               rate: float, efficiency: float = 0.0):
+                               rate: float, efficiency: float = 0.0,
+                               inv_type: str = 'FIAT'):
         # efficiency: 0–100 (e.g. 70 → 70 % win rate)
         eff      = max(0.0, min(100.0, efficiency)) / 100.0
         denom    = 2 * eff - 1
@@ -1234,13 +1252,18 @@ class LinupApp:
             _cell("TOT%",    '#7f8c8d', 1, bold=True),
         ], spacing=3)
 
+        def _fv(v):  # format capital/gain value
+            if inv_type == 'CHIPS':
+                return f"{int(round(v)):,}"
+            return f"${v:.2f}"
+
         # Day 0 — starting capital
         data_rows = [ft.Row([
-            _cell("0",                     '#7f8c8d', 1),
-            _cell("—",                     '#7f8c8d', 1),
-            _cell(f"${start_capital:.2f}", ft.Colors.WHITE, 2),
-            _cell("—",                     '#7f8c8d', 2),
-            _cell("0.0%",                  '#7f8c8d', 1),
+            _cell("0",                  '#7f8c8d', 1),
+            _cell("—",                  '#7f8c8d', 1),
+            _cell(_fv(start_capital),   ft.Colors.WHITE, 2),
+            _cell("—",                  '#7f8c8d', 2),
+            _cell("0.0%",               '#7f8c8d', 1),
         ], spacing=3)]
 
         cap = start_capital
@@ -1252,16 +1275,16 @@ class LinupApp:
             total_pct  = (total_gain / start_capital * 100) if start_capital > 0 else 0.0
             cap     = new_cap
 
-            gain_txt = f"{'+' if gain >= 0 else ''}{gain:.2f}"
+            gain_txt = f"{'+' if gain >= 0 else ''}{_fv(gain)}"
             pct_txt  = f"{'+' if total_pct >= 0 else ''}{total_pct:.1f}%"
 
             gain_cell = _cell(gain_txt, '#2ecc71', 2) if win else _red_cell(gain_txt, 2)
             pct_cell  = _cell(pct_txt,  '#2ecc71', 1) if win else _red_cell(pct_txt,  1)
 
             data_rows.append(ft.Row([
-                _cell(str(i),            ft.Colors.WHITE, 1),
+                _cell(str(i),       ft.Colors.WHITE, 1),
                 _badge(result, win),
-                _cell(f"${new_cap:.2f}", ft.Colors.WHITE, 2),
+                _cell(_fv(new_cap), ft.Colors.WHITE, 2),
                 gain_cell,
                 pct_cell,
             ], spacing=3))
@@ -1292,7 +1315,8 @@ class LinupApp:
     # COMPOUND INTEREST — CUSTOM PERIOD VIEW
     # ──────────────────────────────────────────────────────────────────
     def show_compound_custom_view(self, investment_id, inv_name: str,
-                                  inv_capital: float, rate: float, efficiency: float = 0.0):
+                                  inv_capital: float, rate: float, efficiency: float = 0.0,
+                                  inv_type: str = 'FIAT'):
         periods_field = ft.TextField(
             value="30",
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
@@ -1306,7 +1330,7 @@ class LinupApp:
                 p = max(1, min(730, int(periods_field.value or 30)))
             except Exception:
                 p = 30
-            result_col.controls = [self._build_compound_widget(p, inv_capital, rate, efficiency)]
+            result_col.controls = [self._build_compound_widget(p, inv_capital, rate, efficiency, inv_type)]
             result_col.update()
 
         def go_back(ev):
@@ -1329,6 +1353,8 @@ class LinupApp:
                             color='#3498db', size=14, weight=ft.FontWeight.BOLD,
                         ),
                         ft.Text(
+                            f"Base: {int(round(inv_capital)):,}  |  Rate: {rate * 100:+.2f}% / session"
+                            if inv_type == 'CHIPS' else
                             f"Base: ${inv_capital:.2f}  |  Rate: {rate * 100:+.2f}% / session",
                             color='#7f8c8d', size=12,
                         ),
@@ -1923,13 +1949,13 @@ class LinupApp:
                 ft.Text("45% loss limit reached.", color='#ff4444',
                         size=13, text_align=ft.TextAlign.CENTER),
                 ft.Container(height=6),
-                ft.Text(f"Initial bank:  ${self.banca_inicial:.2f}",
+                ft.Text(f"Initial bank:  {self._fmt_bank(self.banca_inicial)}",
                         color=ft.Colors.WHITE, size=14),
-                ft.Text(f"Final bank:    ${self.banca_actual:.2f}",
+                ft.Text(f"Final bank:    {self._fmt_bank(self.banca_actual)}",
                         color=ft.Colors.WHITE, size=14),
                 ft.Container(height=8),
                 ft.Text(
-                    f"P/L:  ${profit:.2f}   ({pl_pct:.1f}%)",
+                    f"P/L:  {self._fmt_bank(profit)}   ({pl_pct:.1f}%)",
                     color='#ff4444', size=20, weight=ft.FontWeight.BOLD,
                 ),
                 ft.Container(height=10),
@@ -1985,13 +2011,13 @@ class LinupApp:
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 ft.Divider(color='#444444'),
-                ft.Text(f"Initial bank:  ${self.banca_inicial:.2f}",
+                ft.Text(f"Initial bank:  {self._fmt_bank(self.banca_inicial)}",
                         color=ft.Colors.WHITE, size=14),
-                ft.Text(f"Final bank:    ${self.banca_actual:.2f}",
+                ft.Text(f"Final bank:    {self._fmt_bank(self.banca_actual)}",
                         color=ft.Colors.WHITE, size=14),
                 ft.Container(height=8),
                 ft.Text(
-                    f"P/L:  {signo}${profit:.2f}   ({signo}{pl_pct:.1f}%)",
+                    f"P/L:  {signo}{self._fmt_bank(profit)}   ({signo}{pl_pct:.1f}%)",
                     color=color, size=20, weight=ft.FontWeight.BOLD,
                 ),
                 ft.Container(height=10),
@@ -2045,7 +2071,7 @@ class LinupApp:
             self.lbl_inv_pl = None
 
         self.lbl_bank = ft.Text(
-            f"{self.nombre_mesa}  |  ${self.banca_actual:.2f}",
+            f"{self.nombre_mesa}  |  {self._fmt_bank(self.banca_actual)}",
             color='#2ecc71', weight=ft.FontWeight.BOLD, size=13, expand=True,
         )
         self.lbl_inv = ft.Text(
@@ -3119,7 +3145,7 @@ class LinupApp:
             pl -= pending_cost
             displayed_bank -= pending_cost
         pl_pct = (pl / self.banca_inicial * 100) if self.banca_inicial != 0 else 0
-        self.lbl_bank.value = f"{self.nombre_mesa}  |  ${displayed_bank:.2f}"
+        self.lbl_bank.value = f"{self.nombre_mesa}  |  {self._fmt_bank(displayed_bank)}"
         self.lbl_pl.value   = f"P/L: {pl_pct:+.1f}%"
         self.lbl_pl.color   = '#2ecc71' if pl >= 0 else '#ff4444'
         self.update_inv_label()
