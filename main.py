@@ -102,7 +102,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v15.2"
+        self.page.title      = "Linup v15.3"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -417,25 +417,34 @@ class LinupApp:
     # ──────────────────────────────────────────────────────────────────
     # CRYPTO PRICE FETCH  (CoinGecko free API, no key required)
     # ──────────────────────────────────────────────────────────────────
-    _COIN_IDS = {
-        'SOL': 'solana', 'BTC': 'bitcoin', 'ETH': 'ethereum',
-        'ADA': 'cardano', 'AVAX': 'avalanche-2', 'DOT': 'polkadot',
-        'MATIC': 'matic-network', 'LINK': 'chainlink', 'XRP': 'ripple',
-        'DOGE': 'dogecoin', 'BNB': 'binancecoin', 'LTC': 'litecoin',
-        'ATOM': 'cosmos', 'UNI': 'uniswap', 'NEAR': 'near',
-        'TRX': 'tron', 'TON': 'the-open-network', 'SUI': 'sui',
-        'APT': 'aptos', 'INJ': 'injective-protocol', 'SEI': 'sei-network',
-    }
+    # symbol → (display label, coingecko_id or None for stablecoins)
+    _TOKENS = [
+        ('BTC',  'BTC – Bitcoin',   'bitcoin'),
+        ('ETH',  'ETH – Ethereum',  'ethereum'),
+        ('SOL',  'SOL – Solana',    'solana'),
+        ('BNB',  'BNB – BNB Chain', 'binancecoin'),
+        ('XRP',  'XRP – XRP',       'ripple'),
+        ('ADA',  'ADA – Cardano',   'cardano'),
+        ('DOGE', 'DOGE – Dogecoin', 'dogecoin'),
+        ('USDT', 'USDT – Tether',   None),
+        ('USDC', 'USDC – USD Coin', None),
+    ]
 
     async def _fetch_token_price(self, symbol: str) -> float:
-        import urllib.request, json
-        coin_id = self._COIN_IDS.get(symbol.upper(), symbol.lower())
+        import urllib.request, json, ssl
+        token = next((t for t in self._TOKENS if t[0] == symbol.upper()), None)
+        if token and token[2] is None:
+            return 1.0   # stablecoin
+        coin_id = token[2] if token else symbol.lower()
         url = (f"https://api.coingecko.com/api/v3/simple/price"
                f"?ids={coin_id}&vs_currencies=usd")
         try:
-            loop = asyncio.get_event_loop()
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode    = ssl.CERT_NONE
+            loop = asyncio.get_running_loop()
             def _get():
-                with urllib.request.urlopen(url, timeout=6) as r:
+                with urllib.request.urlopen(url, timeout=8, context=ctx) as r:
                     return json.loads(r.read())
             data = await loop.run_in_executor(None, _get)
             return float(data[coin_id]['usd'])
@@ -474,7 +483,7 @@ class LinupApp:
                         ft.Text("Linup", color='#3498db', size=64,
                                 weight=ft.FontWeight.BOLD),
                         ft.Container(height=8),
-                        ft.Text("v15.2", color='#7f8c8d', size=18),
+                        ft.Text("v15.3", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -712,20 +721,27 @@ class LinupApp:
             chip_rows_refs = []
             rows = []
 
+            dd_options = [
+                ft.dropdown.Option(key=sym, text=lbl)
+                for sym, lbl, _ in self._TOKENS
+            ]
+
             for i in range(num_tables):
-                name_f  = ft.TextField(
-                    value=f"TABLE {i + 1}", label="Token / Table",
-                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+                token_dd = ft.Dropdown(
+                    options=dd_options,
+                    value='SOL',
+                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
+                    height=50,
                 )
-                bal_f   = ft.TextField(
+                bal_f = ft.TextField(
                     value="0", label="Token balance",
                     bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
                     keyboard_type=ft.KeyboardType.NUMBER,
                 )
                 price_f = ft.TextField(
-                    value="0", label="Price (USD)",
+                    value="0", label="Price (USD)  –  editable",
                     bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
-                    keyboard_type=ft.KeyboardType.NUMBER, expand=True,
+                    keyboard_type=ft.KeyboardType.NUMBER,
                 )
                 cc_f = ft.TextField(
                     value="10", label="Credits",
@@ -737,12 +753,9 @@ class LinupApp:
                     bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
                     keyboard_type=ft.KeyboardType.NUMBER, expand=1,
                 )
-                chip_lbl = ft.Text("0 chips  |  $0.00", color='#f1c40f',
-                                   size=12, weight=ft.FontWeight.BOLD)
-                fetch_btn = ft.ElevatedButton(
-                    "FETCH", height=45,
-                    style=ft.ButtonStyle(bgcolor='#2980b9', color=ft.Colors.WHITE),
-                )
+                chip_lbl   = ft.Text("0 chips  |  $0.00", color='#f1c40f',
+                                     size=13, weight=ft.FontWeight.BOLD)
+                status_lbl = ft.Text("", color='#7f8c8d', size=11)
 
                 def _make_updater(bf, pf, ccf, ctf, clbl):
                     def update(_=None):
@@ -769,31 +782,42 @@ class LinupApp:
                 cc_f.on_change    = upd
                 ct_f.on_change    = upd
 
-                def _make_fetcher(nf, pf, upd_fn):
-                    def on_fetch(_):
+                def _make_dd_handler(dd, pf, slbl, upd_fn):
+                    def on_change(_):
+                        sym = dd.value or 'SOL'
+                        slbl.value = f"Fetching {sym}…"
+                        try:
+                            slbl.update()
+                        except Exception:
+                            pass
                         async def do():
-                            sym   = nf.value.strip().upper() or 'BTC'
                             price = await self._fetch_token_price(sym)
                             if price > 0:
                                 pf.value = str(price)
-                                try:
-                                    pf.update()
-                                except Exception:
-                                    pass
+                                slbl.value = f"✓ {sym} = ${price:,.4f}"
+                            else:
+                                slbl.value = "Could not fetch — enter price manually"
+                            try:
+                                pf.update()
+                                slbl.update()
+                            except Exception:
+                                pass
                             upd_fn()
                         self.page.run_task(do)
-                    return on_fetch
+                    return on_change
 
-                fetch_btn.on_click = _make_fetcher(name_f, price_f, upd)
+                token_dd.on_change = _make_dd_handler(token_dd, price_f, status_lbl, upd)
 
-                chip_rows_refs.append((name_f, bal_f, price_f, cc_f, ct_f))
+                chip_rows_refs.append((token_dd, bal_f, price_f, cc_f, ct_f))
                 rows.append(ft.Container(
                     bgcolor='#222222', border_radius=8, padding=10,
                     margin=ft.margin.only(bottom=8),
                     content=ft.Column(spacing=6, controls=[
-                        ft.Row(controls=[name_f], spacing=6),
-                        ft.Row(controls=[bal_f], spacing=6),
-                        ft.Row(controls=[price_f, fetch_btn], spacing=6),
+                        ft.Text(f"TABLE {i + 1}", color='#7f8c8d', size=11),
+                        token_dd,
+                        status_lbl,
+                        bal_f,
+                        price_f,
                         ft.Text("Conversion  (credits = tokens)",
                                 color='#7f8c8d', size=11),
                         ft.Row(controls=[cc_f, ct_f], spacing=6),
@@ -804,8 +828,8 @@ class LinupApp:
             def on_create_chips(_):
                 tables_data = []
                 total_usd   = 0.0
-                for idx, (nf, bf, pf, ccf, ctf) in enumerate(chip_rows_refs):
-                    t_name = nf.value.strip().upper() or f"TABLE {idx + 1}"
+                for idx, (dd, bf, pf, ccf, ctf) in enumerate(chip_rows_refs):
+                    t_name = dd.value or f"TABLE {idx + 1}"
                     try:
                         bal   = float(bf.value  or 0)
                         price = float(pf.value  or 0)
