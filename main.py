@@ -1065,6 +1065,20 @@ class LinupApp:
                     if (num_sessions > 0 and float(inv_capital) > 0) else 0.0
                 )
 
+                # For CHIPS: build mesa → USD-per-chip rate and initial USD capital
+                mesa_usd_rate = {}
+                total_usd_cap = 0.0
+                if db_inv_type == 'CHIPS':
+                    cursor.execute(
+                        "SELECT mesa_name, init_bank, token_price, chips_per_token "
+                        "FROM investment_tables WHERE investment_id=?",
+                        (investment_id,)
+                    )
+                    for _mn, _ib, _tp, _cpt in cursor.fetchall():
+                        _rate = (_tp / _cpt) if _cpt and _cpt > 0 else 0.0
+                        mesa_usd_rate[_mn] = _rate
+                        total_usd_cap += float(_ib) * _rate
+
                 cursor.execute(
                     "SELECT session_num, date, mesa, profit, profit_pct "
                     "FROM compound_sessions WHERE investment_id=? ORDER BY id",
@@ -1078,15 +1092,19 @@ class LinupApp:
                             text_align=ft.TextAlign.CENTER),
                 ]
                 if saved_sessions:
-                    running = float(inv_capital)
-                    def _fs(v):  # format session value
-                        if db_inv_type == 'CHIPS':
-                            return f"{int(round(v)):,}"
-                        return f"${v:.2f}"
+                    # CHIPS: running total in USD; FIAT: running total in dollars
+                    running = total_usd_cap if db_inv_type == 'CHIPS' else float(inv_capital)
                     for s_num, s_date, s_mesa, s_profit, s_pct in saved_sessions:
-                        running += s_profit
-                        sign = "+" if s_profit >= 0 else ""
-                        col  = '#2ecc71' if s_profit >= 0 else '#ff4444'
+                        if db_inv_type == 'CHIPS':
+                            disp = s_profit * mesa_usd_rate.get(s_mesa, 0.0)
+                        else:
+                            disp = s_profit
+                        running += disp
+                        sign = "+" if disp >= 0 else ""
+                        col  = '#2ecc71' if disp >= 0 else '#ff4444'
+                        chip_pfx = (f"{'+' if s_profit >= 0 else ''}"
+                                    f"{int(round(s_profit)):,}  "
+                                    if db_inv_type == 'CHIPS' else "")
                         session_rows.append(
                             ft.Container(
                                 bgcolor='#1a1a2e', border_radius=4,
@@ -1097,14 +1115,15 @@ class LinupApp:
                                             size=10, width=90),
                                     ft.Text(s_mesa, color=ft.Colors.WHITE,
                                             size=10, expand=True),
-                                    ft.Text(f"{sign}{_fs(s_profit)} ({sign}{s_pct:.1f}%)",
+                                    ft.Text(f"{chip_pfx}{sign}${disp:.2f} ({sign}{s_pct:.1f}%)",
                                             color=col, size=10,
                                             weight=ft.FontWeight.BOLD),
                                 ], spacing=6),
                             )
                         )
-                    run_col  = '#2ecc71' if running >= float(inv_capital) else '#ff4444'
-                    run_diff = running - float(inv_capital)
+                    run_base = total_usd_cap if db_inv_type == 'CHIPS' else float(inv_capital)
+                    run_col  = '#2ecc71' if running >= run_base else '#ff4444'
+                    run_diff = running - run_base
                     run_sign = "+" if run_diff >= 0 else ""
                     session_rows.append(
                         ft.Container(
@@ -1112,7 +1131,7 @@ class LinupApp:
                             padding=ft.padding.symmetric(horizontal=8, vertical=5),
                             margin=ft.margin.only(top=4),
                             content=ft.Text(
-                                f"Running total: {_fs(running)}  ({run_sign}{_fs(run_diff)})",
+                                f"Running total: ${running:.2f}  ({run_sign}${run_diff:.2f})",
                                 color=run_col, size=11, weight=ft.FontWeight.BOLD,
                                 text_align=ft.TextAlign.CENTER,
                             ),
@@ -1137,8 +1156,9 @@ class LinupApp:
                     self.show_compound_custom_view(iid, n, c, r, e, it)
 
                 def _open_graph(_, c=float(inv_capital),
-                                n=inv_name, iid=investment_id, it=db_inv_type):
-                    self.show_actual_graph_view(iid, n, c, it)
+                                n=inv_name, iid=investment_id, it=db_inv_type,
+                                mur=dict(mesa_usd_rate), uc=total_usd_cap):
+                    self.show_actual_graph_view(iid, n, c, it, mur, uc)
 
                 table_rows.append(ft.Container(height=6))
                 table_rows.append(
@@ -1397,7 +1417,8 @@ class LinupApp:
     # ACTUAL GROWTH GRAPH
     # ──────────────────────────────────────────────────────────────────
     def show_actual_graph_view(self, investment_id: int, inv_name: str,
-                               inv_capital: float, inv_type: str = 'FIAT'):
+                               inv_capital: float, inv_type: str = 'FIAT',
+                               mesa_usd_rate: dict = None, usd_capital: float = 0.0):
         import flet.canvas as cv, inspect
         # cv.Text uses 'value' in Flet ≥0.83, 'text' in older versions
         _tv = ('value' if 'value' in inspect.signature(cv.Text.__init__).parameters
@@ -1408,35 +1429,41 @@ class LinupApp:
                            style=ft.TextStyle(color=color, size=size),
                            **{_tv: str(txt)})
 
-        sessions = []
+        sessions = []  # list of (profit, mesa)
         conn = self._get_conn()
         if conn:
             try:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT profit FROM compound_sessions "
+                    "SELECT profit, mesa FROM compound_sessions "
                     "WHERE investment_id=? ORDER BY id",
                     (investment_id,)
                 )
-                sessions = [row[0] for row in cursor.fetchall()]
+                sessions = cursor.fetchall()
             except Exception:
                 pass
             finally:
                 conn.close()
 
+        if mesa_usd_rate is None:
+            mesa_usd_rate = {}
+
+        chips_mode = inv_type == 'CHIPS'
+
         def go_back(ev):
             self.show_investment_dashboard(investment_id)
 
+        # Always display in USD for the graph
         def _fv(v):
-            if inv_type == 'CHIPS':
-                return f"{int(round(v)):,}"
             return f"${v:.2f}"
 
         # Build (x, y) pairs — point 0 is starting capital
-        pts = [(0, float(inv_capital))]
-        running = float(inv_capital)
-        for profit in sessions:
-            running += profit
+        start_y = usd_capital if chips_mode else float(inv_capital)
+        pts = [(0, start_y)]
+        running = start_y
+        for profit, mesa in sessions:
+            delta = (profit * mesa_usd_rate.get(mesa, 0.0)) if chips_mode else profit
+            running += delta
             pts.append((len(pts), running))
 
         controls: list = [
@@ -1447,7 +1474,7 @@ class LinupApp:
             ft.Container(height=12),
             ft.Text(f"{inv_name}  —  ACTUAL GROWTH",
                     color='#3498db', size=14, weight=ft.FontWeight.BOLD),
-            ft.Text(f"Start: {_fv(inv_capital)}  ·  {len(sessions)} sessions",
+            ft.Text(f"Start: {_fv(start_y)}  ·  {len(sessions)} sessions",
                     color='#7f8c8d', size=12),
             ft.Container(height=10),
         ]
@@ -1581,8 +1608,8 @@ class LinupApp:
             )
 
             # Summary bar
-            final_pl = running - inv_capital
-            pl_pct   = (final_pl / inv_capital * 100) if inv_capital else 0
+            final_pl = running - start_y
+            pl_pct   = (final_pl / start_y * 100) if start_y else 0
             pl_sign  = "+" if final_pl >= 0 else ""
             pl_col   = '#2ecc71' if final_pl >= 0 else '#ff4444'
             controls += [
