@@ -102,7 +102,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v15.6"
+        self.page.title      = "Linup v15.7"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -505,7 +505,7 @@ class LinupApp:
                         ft.Text("Linup", color='#3498db', size=64,
                                 weight=ft.FontWeight.BOLD),
                         ft.Container(height=8),
-                        ft.Text("v15.5", color='#7f8c8d', size=18),
+                        ft.Text("v15.7", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
