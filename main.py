@@ -1131,18 +1131,35 @@ class LinupApp:
                     content=ft.Column(controls=session_rows, spacing=2),
                 ))
 
-                # ── Compound growth projection button ──────────────────
+                # ── Bottom action buttons ───────────────────────────────
                 def _open_projection(_ev, r=per_session_rate, c=float(inv_capital),
                                      n=inv_name, iid=investment_id, e=te, it=db_inv_type):
                     self.show_compound_custom_view(iid, n, c, r, e, it)
 
+                def _open_graph(_, c=float(inv_capital),
+                                n=inv_name, iid=investment_id, it=db_inv_type):
+                    self.show_actual_graph_view(iid, n, c, it)
+
                 table_rows.append(ft.Container(height=6))
                 table_rows.append(
-                    ft.ElevatedButton(
-                        "COMPOUND GROWTH",
-                        on_click=_open_projection,
-                        height=45, expand=True,
-                        style=ft.ButtonStyle(bgcolor='#2980b9', color=ft.Colors.WHITE),
+                    ft.Row(
+                        controls=[
+                            ft.ElevatedButton(
+                                "COMPOUND GROWTH",
+                                on_click=_open_projection,
+                                expand=True, height=45,
+                                style=ft.ButtonStyle(bgcolor='#2980b9',
+                                                     color=ft.Colors.WHITE),
+                            ),
+                            ft.ElevatedButton(
+                                "ACTUAL GRAPH",
+                                on_click=_open_graph,
+                                expand=True, height=45,
+                                style=ft.ButtonStyle(bgcolor='#6c3483',
+                                                     color=ft.Colors.WHITE),
+                            ),
+                        ],
+                        spacing=8,
                     )
                 )
 
@@ -1375,6 +1392,168 @@ class LinupApp:
             )
         )
         generate()   # auto-generate on open
+
+    # ──────────────────────────────────────────────────────────────────
+    # ACTUAL GROWTH GRAPH
+    # ──────────────────────────────────────────────────────────────────
+    def show_actual_graph_view(self, investment_id: int, inv_name: str,
+                               inv_capital: float, inv_type: str = 'FIAT'):
+        sessions = []
+        conn = self._get_conn()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT profit FROM compound_sessions "
+                    "WHERE investment_id=? ORDER BY id",
+                    (investment_id,)
+                )
+                sessions = [row[0] for row in cursor.fetchall()]
+            except Exception:
+                pass
+            finally:
+                conn.close()
+
+        def go_back(ev):
+            self.show_investment_dashboard(investment_id)
+
+        def _fv(v):
+            if inv_type == 'CHIPS':
+                return f"{int(round(v)):,}"
+            return f"${v:.2f}"
+
+        # Build (x, y) pairs — point 0 is starting capital
+        pts = [(0, float(inv_capital))]
+        running = float(inv_capital)
+        for profit in sessions:
+            running += profit
+            pts.append((len(pts), running))
+
+        controls: list = [
+            ft.ElevatedButton(
+                "←  BACK", on_click=go_back,
+                style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE),
+            ),
+            ft.Container(height=12),
+            ft.Text(f"{inv_name}  —  ACTUAL GROWTH",
+                    color='#3498db', size=14, weight=ft.FontWeight.BOLD),
+            ft.Text(f"Start: {_fv(inv_capital)}  ·  {len(sessions)} sessions",
+                    color='#7f8c8d', size=12),
+            ft.Container(height=10),
+        ]
+
+        if len(pts) < 2:
+            controls.append(
+                ft.Text("No sessions saved yet — play and save sessions first.",
+                        color='#7f8c8d', size=12,
+                        text_align=ft.TextAlign.CENTER)
+            )
+        else:
+            yvals = [p[1] for p in pts]
+            pad   = max((max(yvals) - min(yvals)) * 0.12, abs(inv_capital * 0.05), 1.0)
+            min_y = min(yvals) - pad
+            max_y = max(yvals) + pad
+            max_x = float(len(pts) - 1)
+
+            # Y-axis: 5 evenly-spaced labels
+            y_span = max_y - min_y
+            y_labels = [
+                ft.ChartAxisLabel(
+                    value=min_y + i * y_span / 4,
+                    label=ft.Container(
+                        content=ft.Text(_fv(min_y + i * y_span / 4),
+                                        size=8, color='#aaaaaa'),
+                        padding=ft.padding.only(right=4),
+                    ),
+                )
+                for i in range(5)
+            ]
+
+            # X-axis: up to 6 labels
+            step = max(1, round(max_x / 5))
+            x_labels = [
+                ft.ChartAxisLabel(
+                    value=float(i),
+                    label=ft.Container(
+                        content=ft.Text(str(i), size=8, color='#aaaaaa'),
+                        padding=ft.padding.only(top=4),
+                    ),
+                )
+                for i in range(0, len(pts), step)
+            ]
+
+            line_color = '#2ecc71' if running >= inv_capital else '#ff4444'
+
+            chart = ft.LineChart(
+                data_series=[
+                    ft.LineChartData(
+                        data_points=[ft.LineChartDataPoint(x=float(x), y=y)
+                                     for x, y in pts],
+                        color=line_color,
+                        stroke_width=2,
+                        curved=False,
+                        below_line_bgcolor=f"{line_color}22",
+                    ),
+                    # break-even reference
+                    ft.LineChartData(
+                        data_points=[
+                            ft.LineChartDataPoint(x=0.0, y=inv_capital),
+                            ft.LineChartDataPoint(x=max_x, y=inv_capital),
+                        ],
+                        color='#555555',
+                        stroke_width=1,
+                        dash_pattern=[4, 4],
+                    ),
+                ],
+                left_axis=ft.ChartAxis(labels=y_labels, labels_size=62),
+                bottom_axis=ft.ChartAxis(labels=x_labels, labels_size=22),
+                horizontal_grid_lines=ft.ChartGridLines(
+                    interval=y_span / 4, color='#333333', width=1),
+                vertical_grid_lines=ft.ChartGridLines(
+                    interval=step, color='#2a2a2a', width=1),
+                min_x=0.0, max_x=max_x,
+                min_y=min_y, max_y=max_y,
+                bgcolor='#1a2535',
+                border=ft.border.only(
+                    bottom=ft.border.BorderSide(1, '#444444'),
+                    left=ft.border.BorderSide(1, '#444444'),
+                ),
+                height=300,
+                expand=True,
+                tooltip_bgcolor='#2c2c2c',
+            )
+
+            controls.append(
+                ft.Container(bgcolor='#1a2535', border_radius=8,
+                             padding=ft.padding.only(top=10, right=10, bottom=4),
+                             content=chart)
+            )
+
+            # Summary bar
+            final_pl = running - inv_capital
+            pl_pct   = (final_pl / inv_capital * 100) if inv_capital else 0
+            pl_sign  = "+" if final_pl >= 0 else ""
+            pl_col   = '#2ecc71' if final_pl >= 0 else '#ff4444'
+            controls += [
+                ft.Container(height=10),
+                ft.Container(
+                    bgcolor='#1e2d1e' if final_pl >= 0 else '#2d1e1e',
+                    padding=10, border_radius=6,
+                    content=ft.Text(
+                        f"Current: {_fv(running)}  |  "
+                        f"P/L: {pl_sign}{_fv(final_pl)} ({pl_sign}{pl_pct:.1f}%)",
+                        color=pl_col, size=13, weight=ft.FontWeight.BOLD,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                ),
+            ]
+
+        self._set_view(
+            ft.Container(
+                bgcolor='#1a1a1a', expand=True, padding=20,
+                content=ft.ListView(expand=True, controls=controls),
+            )
+        )
 
     # ──────────────────────────────────────────────────────────────────
     # LOAD INVESTMENT
