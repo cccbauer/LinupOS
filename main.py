@@ -1398,7 +1398,15 @@ class LinupApp:
     # ──────────────────────────────────────────────────────────────────
     def show_actual_graph_view(self, investment_id: int, inv_name: str,
                                inv_capital: float, inv_type: str = 'FIAT'):
-        import flet.canvas as cv
+        import flet.canvas as cv, inspect
+        # cv.Text uses 'value' in Flet ≥0.83, 'text' in older versions
+        _tv = ('value' if 'value' in inspect.signature(cv.Text.__init__).parameters
+               else 'text')
+
+        def _cv_text(x, y, txt, color='#888888', size=8):
+            return cv.Text(x=x, y=y,
+                           style=ft.TextStyle(color=color, size=size),
+                           **{_tv: str(txt)})
 
         sessions = []
         conn = self._get_conn()
@@ -1487,11 +1495,7 @@ class LinupApp:
                         x1=ML, y1=gy, x2=ML + pw, y2=gy,
                         paint=ft.Paint(color='#2a2a2a', stroke_width=1)
                     ))
-                    shapes.append(cv.Text(
-                        x=0, y=gy - 6,
-                        text=_fv(val),
-                        style=ft.TextStyle(color='#888888', size=8),
-                    ))
+                    shapes.append(_cv_text(0, gy - 6, _fv(val)))
 
                 # Break-even dashed line
                 bey = sy(inv_capital)
@@ -1540,11 +1544,7 @@ class LinupApp:
                 # X-axis labels
                 x_step = max(1, round(max_xi / 5))
                 for i in range(0, len(pts), x_step):
-                    shapes.append(cv.Text(
-                        x=sx(i) - 4, y=MT + ph + 4,
-                        text=str(i),
-                        style=ft.TextStyle(color='#888888', size=8),
-                    ))
+                    shapes.append(_cv_text(sx(i) - 4, MT + ph + 4, str(i)))
 
                 # Axes border
                 shapes.append(cv.Line(
