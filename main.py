@@ -1367,7 +1367,7 @@ class LinupApp:
             return float(math.ceil(val / 10) * 10)
 
         sug_fin  = _round_up_chip(sug_bank * (sug_max_loss / 100) / 225)
-        sug_fout = _round_up_chip(sug_bank * (sug_max_loss / 100) / 26)
+        sug_fout = sug_fin * 10
 
         def _f(val):
             try:
@@ -1378,7 +1378,8 @@ class LinupApp:
         def _chips_from(bk, loss_pct):
             """Return (fin, fout) given bank and max-loss %."""
             factor = bk * max(loss_pct, 0) / 100
-            return _round_up_chip(factor / 225), _round_up_chip(factor / 26)
+            fin = _round_up_chip(factor / 225)
+            return fin, fin * 10
 
         def _chip_label_text(chip_val, bank, multiplier_sum, max_loss_pct):
             """chip_val × multiplier_sum = total 3-loss cost; % relative to bank"""
