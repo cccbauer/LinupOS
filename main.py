@@ -1460,9 +1460,11 @@ class LinupApp:
             )
         else:
             yvals  = [p[1] for p in pts]
-            pad    = max((max(yvals) - min(yvals)) * 0.12, abs(inv_capital * 0.05), 1.0)
-            min_y  = min(yvals) - pad
-            max_y  = max(yvals) + pad
+            data_range = max(max(yvals) - min(yvals), abs(inv_capital * 0.01), 1.0)
+            mid    = (max(yvals) + min(yvals)) / 2
+            half   = data_range * 1.5 / 2
+            min_y  = mid - half
+            max_y  = mid + half
             y_span = max_y - min_y
             max_xi = len(pts) - 1
             line_color = '#2ecc71' if running >= inv_capital else '#ff4444'
