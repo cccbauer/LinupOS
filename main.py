@@ -102,7 +102,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v15.1"
+        self.page.title      = "Linup v15.2"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -238,7 +238,23 @@ class LinupApp:
                     conn.execute("ALTER TABLE sesiones ADD COLUMN banca_inicial REAL")
                     conn.commit()
                 except Exception:
-                    pass  # column already exists
+                    pass
+                try:
+                    conn.execute("ALTER TABLE investments ADD COLUMN inv_type TEXT DEFAULT 'FIAT'")
+                    conn.commit()
+                except Exception:
+                    pass
+                for _col in [
+                    "ALTER TABLE investment_tables ADD COLUMN token_symbol TEXT DEFAULT ''",
+                    "ALTER TABLE investment_tables ADD COLUMN token_balance REAL DEFAULT 0",
+                    "ALTER TABLE investment_tables ADD COLUMN token_price REAL DEFAULT 0",
+                    "ALTER TABLE investment_tables ADD COLUMN chips_per_token REAL DEFAULT 0",
+                ]:
+                    try:
+                        conn.execute(_col)
+                        conn.commit()
+                    except Exception:
+                        pass
                 conn.close()
                 self.db_path = db_path
                 break
@@ -399,6 +415,34 @@ class LinupApp:
             }
 
     # ──────────────────────────────────────────────────────────────────
+    # CRYPTO PRICE FETCH  (CoinGecko free API, no key required)
+    # ──────────────────────────────────────────────────────────────────
+    _COIN_IDS = {
+        'SOL': 'solana', 'BTC': 'bitcoin', 'ETH': 'ethereum',
+        'ADA': 'cardano', 'AVAX': 'avalanche-2', 'DOT': 'polkadot',
+        'MATIC': 'matic-network', 'LINK': 'chainlink', 'XRP': 'ripple',
+        'DOGE': 'dogecoin', 'BNB': 'binancecoin', 'LTC': 'litecoin',
+        'ATOM': 'cosmos', 'UNI': 'uniswap', 'NEAR': 'near',
+        'TRX': 'tron', 'TON': 'the-open-network', 'SUI': 'sui',
+        'APT': 'aptos', 'INJ': 'injective-protocol', 'SEI': 'sei-network',
+    }
+
+    async def _fetch_token_price(self, symbol: str) -> float:
+        import urllib.request, json
+        coin_id = self._COIN_IDS.get(symbol.upper(), symbol.lower())
+        url = (f"https://api.coingecko.com/api/v3/simple/price"
+               f"?ids={coin_id}&vs_currencies=usd")
+        try:
+            loop = asyncio.get_event_loop()
+            def _get():
+                with urllib.request.urlopen(url, timeout=6) as r:
+                    return json.loads(r.read())
+            data = await loop.run_in_executor(None, _get)
+            return float(data[coin_id]['usd'])
+        except Exception:
+            return 0.0
+
+    # ──────────────────────────────────────────────────────────────────
     # NAVIGATION
     # ──────────────────────────────────────────────────────────────────
 
@@ -430,7 +474,7 @@ class LinupApp:
                         ft.Text("Linup", color='#3498db', size=64,
                                 weight=ft.FontWeight.BOLD),
                         ft.Container(height=8),
-                        ft.Text("v15.1", color='#7f8c8d', size=18),
+                        ft.Text("v15.2", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -490,13 +534,37 @@ class LinupApp:
             keyboard_type=ft.KeyboardType.NUMBER,
         )
 
+        inv_type = ['FIAT']
+
+        fiat_btn = ft.ElevatedButton(
+            "FIAT", expand=1, height=44,
+            style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE),
+        )
+        chips_btn = ft.ElevatedButton(
+            "CHIPS", expand=1, height=44,
+            style=ft.ButtonStyle(bgcolor='#333333', color=ft.Colors.WHITE),
+        )
+        capital_label = ft.Text("Capital ($)", color='#7f8c8d', size=12)
+
+        def set_type(t):
+            inv_type[0] = t
+            fiat_btn.style  = ft.ButtonStyle(bgcolor='#27ae60' if t == 'FIAT'  else '#333333', color=ft.Colors.WHITE)
+            chips_btn.style = ft.ButtonStyle(bgcolor='#f39c12' if t == 'CHIPS' else '#333333', color=ft.Colors.WHITE)
+            capital_label.value = "Capital ($)  ·  auto-calculated from tables" if t == 'CHIPS' else "Capital ($)"
+            capital_field.visible = t == 'FIAT'
+            fiat_btn.update(); chips_btn.update()
+            capital_label.update(); capital_field.update()
+
+        fiat_btn.on_click  = lambda _e: set_type('FIAT')
+        chips_btn.on_click = lambda _e: set_type('CHIPS')
+
         def on_next(ev):
             try:
                 inv_name = inv_name_field.value.strip().upper() or "INVESTMENT 1"
-                capital  = float(capital_field.value or 0)
+                capital  = float(capital_field.value or 0) if inv_type[0] == 'FIAT' else 0.0
             except Exception:
                 return
-            self._show_num_tables_form(inv_name, capital)
+            self._show_num_tables_form(inv_name, capital, inv_type[0])
 
         self._set_view(
             ft.Container(
@@ -513,8 +581,13 @@ class LinupApp:
                         ft.Text("NEW INVESTMENT", color='#3498db', size=20,
                                 weight=ft.FontWeight.BOLD),
                         ft.Container(height=12),
+                        ft.Text("TYPE", color='#7f8c8d', size=12),
+                        ft.Container(height=4),
+                        ft.Row(controls=[fiat_btn, chips_btn], spacing=8),
+                        ft.Container(height=12),
                         inv_name_field,
                         ft.Container(height=8),
+                        capital_label,
                         capital_field,
                         ft.Container(height=20),
                         ft.ElevatedButton(
@@ -530,7 +603,7 @@ class LinupApp:
 
     # NEW INVESTMENT — Step 2: number of tables
     # ──────────────────────────────────────────────────────────────────
-    def _show_num_tables_form(self, inv_name: str, capital: float):
+    def _show_num_tables_form(self, inv_name: str, capital: float, inv_type: str = 'FIAT'):
         num_tables_field = ft.TextField(
             label="Number of Tables", value="1",
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=50,
@@ -542,7 +615,9 @@ class LinupApp:
                 num_tables = max(1, min(10, int(num_tables_field.value or 1)))
             except Exception:
                 return
-            self._show_table_setup(inv_name, capital, num_tables)
+            self._show_table_setup(inv_name, capital, num_tables, inv_type)
+
+        cap_txt = f"Capital: ${capital:,.2f}" if inv_type == 'FIAT' else f"Type: {inv_type}"
 
         self._set_view(
             ft.Container(
@@ -558,7 +633,7 @@ class LinupApp:
                         ft.Container(height=16),
                         ft.Text(inv_name, color='#3498db', size=20,
                                 weight=ft.FontWeight.BOLD),
-                        ft.Text(f"Capital: ${capital:,.2f}", color='#7f8c8d', size=14),
+                        ft.Text(cap_txt, color='#7f8c8d', size=14),
                         ft.Container(height=12),
                         num_tables_field,
                         ft.Container(height=20),
@@ -576,60 +651,193 @@ class LinupApp:
     # ──────────────────────────────────────────────────────────────────
     # NEW INVESTMENT — Step 2: table names and banks
     # ──────────────────────────────────────────────────────────────────
-    def _show_table_setup(self, inv_name: str, capital: float, num_tables: int):
-        bank_per_table = round(capital * 0.03, 2)
-        name_fields = []
-        bank_fields = []
-        rows = []
-        for i in range(num_tables):
-            nf = ft.TextField(
-                value=f"TABLE {i + 1}",
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
-                expand=2,
-            )
-            bf = ft.TextField(
-                value=str(bank_per_table),
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
-                keyboard_type=ft.KeyboardType.NUMBER,
-                expand=1,
-            )
-            name_fields.append(nf)
-            bank_fields.append(bf)
-            rows.append(ft.Row(controls=[nf, bf], spacing=6))
+    def _show_table_setup(self, inv_name: str, capital: float, num_tables: int,
+                          inv_type: str = 'FIAT'):
+        # ── FIAT MODE ──────────────────────────────────────────────
+        if inv_type == 'FIAT':
+            bank_per_table = round(capital * 0.03, 2)
+            name_fields, bank_fields, rows = [], [], []
+            for i in range(num_tables):
+                nf = ft.TextField(
+                    value=f"TABLE {i + 1}",
+                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+                    expand=2,
+                )
+                bf = ft.TextField(
+                    value=str(bank_per_table),
+                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+                    keyboard_type=ft.KeyboardType.NUMBER, expand=1,
+                )
+                name_fields.append(nf)
+                bank_fields.append(bf)
+                rows.append(ft.Row(controls=[nf, bf], spacing=6))
 
-        def on_create(ev):
-            tables_data = []
-            for nf, bf in zip(name_fields, bank_fields):
-                t_name = nf.value.strip().upper() or f"TABLE {len(tables_data) + 1}"
-                try:
-                    t_bank = float(bf.value or bank_per_table)
-                except Exception:
-                    t_bank = bank_per_table
-                tables_data.append((t_name, t_bank))
-            self._create_investment(inv_name, capital, tables_data)
+            def on_create_fiat(_):
+                tables_data = []
+                for nf, bf in zip(name_fields, bank_fields):
+                    t_name = nf.value.strip().upper() or f"TABLE {len(tables_data) + 1}"
+                    try:
+                        t_bank = float(bf.value or bank_per_table)
+                    except Exception:
+                        t_bank = bank_per_table
+                    tables_data.append((t_name, t_bank))
+                self._create_investment(inv_name, capital, tables_data, 'FIAT')
 
-        controls = [
-            ft.ElevatedButton(
-                "←  BACK", on_click=self.show_new_investment_form,
-                style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE),
-            ),
-            ft.Container(height=12),
-            ft.Text(f"{inv_name}  |  Capital: ${capital:.2f}", color='#3498db',
-                    size=16, weight=ft.FontWeight.BOLD),
-            ft.Container(height=4),
-            ft.Row(controls=[
-                ft.Text("TABLE NAME", color='#7f8c8d', size=12, expand=2),
-                ft.Text("BANK", color='#7f8c8d', size=12, expand=1),
-            ]),
-            ft.Container(height=4),
-        ] + rows + [
-            ft.Container(height=20),
-            ft.ElevatedButton(
-                "CREATE INVESTMENT", on_click=on_create,
-                height=60, expand=True,
-                style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE),
-            ),
-        ]
+            controls = [
+                ft.ElevatedButton(
+                    "←  BACK", on_click=self.show_new_investment_form,
+                    style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE),
+                ),
+                ft.Container(height=12),
+                ft.Text(f"{inv_name}  |  Capital: ${capital:.2f}", color='#3498db',
+                        size=16, weight=ft.FontWeight.BOLD),
+                ft.Container(height=4),
+                ft.Row(controls=[
+                    ft.Text("TABLE NAME", color='#7f8c8d', size=12, expand=2),
+                    ft.Text("BANK ($)", color='#7f8c8d', size=12, expand=1),
+                ]),
+                ft.Container(height=4),
+            ] + rows + [
+                ft.Container(height=20),
+                ft.ElevatedButton(
+                    "CREATE INVESTMENT", on_click=on_create_fiat,
+                    height=60, expand=True,
+                    style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE),
+                ),
+            ]
+
+        # ── CHIPS MODE ─────────────────────────────────────────────
+        else:
+            # Each entry: (name_f, bal_f, price_f, cc_f, ct_f, chip_lbl)
+            chip_rows_refs = []
+            rows = []
+
+            for i in range(num_tables):
+                name_f  = ft.TextField(
+                    value=f"TABLE {i + 1}", label="Token / Table",
+                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+                )
+                bal_f   = ft.TextField(
+                    value="0", label="Token balance",
+                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+                    keyboard_type=ft.KeyboardType.NUMBER,
+                )
+                price_f = ft.TextField(
+                    value="0", label="Price (USD)",
+                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+                    keyboard_type=ft.KeyboardType.NUMBER, expand=True,
+                )
+                cc_f = ft.TextField(
+                    value="10", label="Credits",
+                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+                    keyboard_type=ft.KeyboardType.NUMBER, expand=1,
+                )
+                ct_f = ft.TextField(
+                    value="0.0004", label="= tokens",
+                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+                    keyboard_type=ft.KeyboardType.NUMBER, expand=1,
+                )
+                chip_lbl = ft.Text("0 chips  |  $0.00", color='#f1c40f',
+                                   size=12, weight=ft.FontWeight.BOLD)
+                fetch_btn = ft.ElevatedButton(
+                    "FETCH", height=45,
+                    style=ft.ButtonStyle(bgcolor='#2980b9', color=ft.Colors.WHITE),
+                )
+
+                def _make_updater(bf, pf, ccf, ctf, clbl):
+                    def update(_=None):
+                        try:
+                            bal   = float(bf.value  or 0)
+                            price = float(pf.value  or 0)
+                            cc    = float(ccf.value or 10)
+                            ct    = float(ctf.value or 0.0004)
+                            cpt   = cc / ct if ct > 0 else 0
+                            chips = int(bal * cpt)
+                            usd   = bal * price
+                            clbl.value = f"{chips:,} chips  |  ${usd:,.2f}"
+                        except Exception:
+                            clbl.value = "—"
+                        try:
+                            clbl.update()
+                        except Exception:
+                            pass
+                    return update
+
+                upd = _make_updater(bal_f, price_f, cc_f, ct_f, chip_lbl)
+                bal_f.on_change   = upd
+                price_f.on_change = upd
+                cc_f.on_change    = upd
+                ct_f.on_change    = upd
+
+                def _make_fetcher(nf, pf, upd_fn):
+                    def on_fetch(_):
+                        async def do():
+                            sym   = nf.value.strip().upper() or 'BTC'
+                            price = await self._fetch_token_price(sym)
+                            if price > 0:
+                                pf.value = str(price)
+                                try:
+                                    pf.update()
+                                except Exception:
+                                    pass
+                            upd_fn()
+                        self.page.run_task(do)
+                    return on_fetch
+
+                fetch_btn.on_click = _make_fetcher(name_f, price_f, upd)
+
+                chip_rows_refs.append((name_f, bal_f, price_f, cc_f, ct_f))
+                rows.append(ft.Container(
+                    bgcolor='#222222', border_radius=8, padding=10,
+                    margin=ft.margin.only(bottom=8),
+                    content=ft.Column(spacing=6, controls=[
+                        ft.Row(controls=[name_f], spacing=6),
+                        ft.Row(controls=[bal_f], spacing=6),
+                        ft.Row(controls=[price_f, fetch_btn], spacing=6),
+                        ft.Text("Conversion  (credits = tokens)",
+                                color='#7f8c8d', size=11),
+                        ft.Row(controls=[cc_f, ct_f], spacing=6),
+                        chip_lbl,
+                    ]),
+                ))
+
+            def on_create_chips(_):
+                tables_data = []
+                total_usd   = 0.0
+                for idx, (nf, bf, pf, ccf, ctf) in enumerate(chip_rows_refs):
+                    t_name = nf.value.strip().upper() or f"TABLE {idx + 1}"
+                    try:
+                        bal   = float(bf.value  or 0)
+                        price = float(pf.value  or 0)
+                        cc    = float(ccf.value or 10)
+                        ct    = float(ctf.value or 0.0004)
+                        cpt   = cc / ct if ct > 0 else 0
+                        chips = round(bal * cpt, 2)
+                    except Exception:
+                        bal = price = cpt = chips = 0.0
+                    tables_data.append((t_name, chips, t_name, bal, price, cpt))
+                    total_usd += bal * price
+                self._create_investment(inv_name, total_usd, tables_data, 'CHIPS')
+
+            controls = [
+                ft.ElevatedButton(
+                    "←  BACK", on_click=self.show_new_investment_form,
+                    style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE),
+                ),
+                ft.Container(height=12),
+                ft.Text(f"{inv_name}  ·  CHIPS", color='#f39c12',
+                        size=16, weight=ft.FontWeight.BOLD),
+                ft.Text("Enter token balance + conversion for each table.",
+                        color='#7f8c8d', size=12),
+                ft.Container(height=8),
+            ] + rows + [
+                ft.Container(height=20),
+                ft.ElevatedButton(
+                    "CREATE INVESTMENT", on_click=on_create_chips,
+                    height=60, expand=True,
+                    style=ft.ButtonStyle(bgcolor='#f39c12', color=ft.Colors.WHITE),
+                ),
+            ]
 
         self._set_view(
             ft.Container(
@@ -641,23 +849,38 @@ class LinupApp:
     # ──────────────────────────────────────────────────────────────────
     # SAVE INVESTMENT TO DB
     # ──────────────────────────────────────────────────────────────────
-    def _create_investment(self, inv_name: str, capital: float, tables_data: list):
+    def _create_investment(self, inv_name: str, capital: float, tables_data: list,
+                           inv_type: str = 'FIAT'):
         conn = self._get_conn()
         inv_id = None
         if conn:
             try:
                 fecha = datetime.now().strftime("%d/%m/%Y %H:%M")
                 cursor = conn.execute(
-                    "INSERT INTO investments (name, capital, created_at) VALUES (?, ?, ?)",
-                    (inv_name, round(capital, 2), fecha)
+                    "INSERT INTO investments (name, capital, created_at, inv_type) "
+                    "VALUES (?, ?, ?, ?)",
+                    (inv_name, round(capital, 2), fecha, inv_type)
                 )
                 inv_id = cursor.lastrowid
-                for mesa_name, init_bank in tables_data:
-                    conn.execute(
-                        "INSERT INTO investment_tables "
-                        "(investment_id, mesa_name, init_bank) VALUES (?, ?, ?)",
-                        (inv_id, mesa_name, round(init_bank, 2))
-                    )
+                if inv_type == 'CHIPS':
+                    for (mesa_name, chip_bal, token_sym,
+                         token_bal, token_price, chips_per_tok) in tables_data:
+                        conn.execute(
+                            "INSERT INTO investment_tables "
+                            "(investment_id, mesa_name, init_bank, "
+                            " token_symbol, token_balance, token_price, chips_per_token) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (inv_id, mesa_name, round(chip_bal, 2),
+                             token_sym, token_bal, token_price,
+                             round(chips_per_tok, 6))
+                        )
+                else:
+                    for mesa_name, init_bank in tables_data:
+                        conn.execute(
+                            "INSERT INTO investment_tables "
+                            "(investment_id, mesa_name, init_bank) VALUES (?, ?, ?)",
+                            (inv_id, mesa_name, round(init_bank, 2))
+                        )
                 conn.commit()
             except Exception:
                 pass
