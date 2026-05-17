@@ -28,9 +28,17 @@ GRUPOS_MAESTROS = {
     'W2': {6, 9, 13, 14, 17, 18, 22, 25, 27, 29, 31, 34},
     # W3 Through: remaining       → 12 numbers
     'W3': {1, 5, 8, 10, 11, 16, 20, 23, 24, 30, 33, 36},
+    # Filter groups (for mixer combinations)
+    'R': ROJOS,
+    'B': set(range(1, 37)) - ROJOS,
+    'Even': {n for n in range(2, 37, 2)},
+    'Odd': {n for n in range(1, 37, 2)},
+    '1-18': set(range(1, 19)),
+    '19-36': set(range(19, 37)),
 }
 PROG_FIBO = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55]
 C_COL, C_DOC, C_SEC, C_SET, C_WAV = '#00d2ff', '#2ecc71', '#e67e22', '#9b59b6', '#e91e63'
+C_FLT_R, C_FLT_B, C_FLT_E, C_FLT_O, C_FLT_18, C_FLT_36 = '#c0392b', '#222222', '#446644', '#664444', '#555577', '#445566'
 NUM_COLS = 20
 
 # ── Wheel neighbours (European single-zero wheel order) ──────────────
@@ -146,14 +154,15 @@ class LinupApp:
     # ──────────────────────────────────────────────────────────────────
     def _col_width(self):
         w  = self.page.width or 360
-        vc = getattr(self, 'visible_cats', {k: True for k in ['basic','cols','docs','secs','thirds','wave']})
+        vc = getattr(self, 'visible_cats', {k: True for k in ['basic','cols','docs','secs','thirds','wave','filters']})
         n  = (1
               + (6 if vc.get('basic',  True) else 0)
               + (3 if vc.get('cols',   True) else 0)
               + (3 if vc.get('docs',   True) else 0)
               + (4 if vc.get('secs',   True) else 0)
               + (3 if vc.get('thirds', True) else 0)
-              + (3 if vc.get('wave',   True) else 0))
+              + (3 if vc.get('wave',   True) else 0)
+              + (4 if vc.get('filters', True) else 0))
         return max(11, int((w - 4) / max(n, 1)))
 
     def _on_resize(self, e):
@@ -416,6 +425,7 @@ class LinupApp:
                 'secs':   True,   # Z0 ZG ZP H
                 'thirds': True,   # T1 T2 T3
                 'wave':   True,   # W1 W2 W3
+                'filters': True,  # R B 1-18 19-36
             }
 
     def _fmt_bank(self, val: float) -> str:
@@ -2097,6 +2107,9 @@ class LinupApp:
                                      value=vc['wave'],
                                      fill_color=C_WAV, check_color=ft.Colors.WHITE,
                                      label_style=ft.TextStyle(color=ft.Colors.WHITE, size=13))
+        self.cb_filters = ft.Checkbox(label="Filters  (R B Even Odd 1-18 19-36)", value=vc.get('filters', True),
+                                      fill_color='#FF6B00', check_color=ft.Colors.WHITE,
+                                      label_style=ft.TextStyle(color=ft.Colors.WHITE, size=13))
 
         btn_txt = "RESUME TABLE" if is_continue else "OPEN TABLE"
         self._set_view(
@@ -2134,6 +2147,7 @@ class LinupApp:
                         self.cb_secs,
                         self.cb_thirds,
                         self.cb_wave,
+                        self.cb_filters,
                         ft.Container(height=6),
                         ft.ElevatedButton(
                             btn_txt, on_click=self.iniciar_ciclo,
@@ -2167,6 +2181,7 @@ class LinupApp:
                 'secs':   bool(self.cb_secs.value),
                 'thirds': bool(self.cb_thirds.value),
                 'wave':   bool(self.cb_wave.value),
+                'filters': bool(self.cb_filters.value),
             }
         except Exception:
             pass
@@ -2501,10 +2516,6 @@ class LinupApp:
                 _all_filter_btns.append((opt, btn))
                 return btn
 
-            row1 = ft.Row(controls=[
-                _filter_btn('R', '■  RED',   height=38, size=12),
-                _filter_btn('B', '■  BLACK', height=38, size=12),
-            ], spacing=4)
             row2 = ft.Row(controls=[
                 _filter_btn('1-18',  '1-18',  height=28, size=9),
                 _filter_btn('Even',  'Even',  height=28, size=9),
@@ -2516,17 +2527,18 @@ class LinupApp:
             rb_bar = ft.Container(
                 bgcolor='#1a2a3a',
                 padding=ft.padding.symmetric(horizontal=6, vertical=4),
-                content=ft.Column(controls=[row1, row2], spacing=3),
+                content=ft.Column(controls=[row2], spacing=3),
             )
 
         self.mixer_btns = {}
         vc = self.visible_cats
         all_cats = [
-            ('cols',   ['34', '35', '36'],      C_COL),
-            ('docs',   ['1a', '2a', '3a'],      C_DOC),
-            ('secs',   ['Z0', 'ZG', 'ZP', 'H'], C_SEC),
-            ('thirds', ['T1', 'T2', 'T3'],      C_SET),
-            ('wave',   ['W1', 'W2', 'W3'],      C_WAV),
+            ('cols',   ['34', '35', '36'],               C_COL),
+            ('docs',   ['1a', '2a', '3a'],               C_DOC),
+            ('secs',   ['Z0', 'ZG', 'ZP', 'H'],          C_SEC),
+            ('thirds', ['T1', 'T2', 'T3'],               C_SET),
+            ('wave',   ['W1', 'W2', 'W3'],               C_WAV),
+            ('filters', ['R', 'B', 'Even', 'Odd', '1-18', '19-36'], '#FF6B00'),  # Orange for filters
         ]
         cats = [(grps, col) for key, grps, col in all_cats if vc.get(key, True)]
         mixer_rows = []
@@ -2666,7 +2678,7 @@ class LinupApp:
     # ──────────────────────────────────────────────────────────────────
     def _table_specs(self):
         """Return list of (header, color) pairs based on visible_cats."""
-        vc = getattr(self, 'visible_cats', {k: True for k in ['basic','cols','docs','secs','thirds','wave']})
+        vc = getattr(self, 'visible_cats', {k: True for k in ['basic','cols','docs','secs','thirds','wave','filters']})
         W  = ft.Colors.WHITE
         specs = [("N", '#f1c40f')]
         if vc.get('basic',  True): specs += [("R",'#ff4d4d'),("N",W),("P",'#3498db'),("I",'#f39c12'),("B",W),("A",W)]
@@ -2675,6 +2687,7 @@ class LinupApp:
         if vc.get('secs',   True): specs += [("Z0",C_SEC),("ZG",C_SEC),("ZP",C_SEC),("H",C_SEC)]
         if vc.get('thirds', True): specs += [("T1",C_SET),("T2",C_SET),("T3",C_SET)]
         if vc.get('wave',   True): specs += [("W1",C_WAV),("W2",C_WAV),("W3",C_WAV)]
+        if vc.get('filters', True): specs += [("R",'#c0392b'),("B",'#222222'),("E",'#446644'),("O",'#664444'),("18",'#555577'),("36",'#445566')]
         return specs
 
     def _rebuild_table_header(self):
@@ -2693,7 +2706,7 @@ class LinupApp:
         cw = self._col_width()
         self._rebuild_table_header()
         self.reg_rows_box.controls.clear()
-        vc = getattr(self, 'visible_cats', {k: True for k in ['basic','cols','docs','secs','thirds','wave']})
+        vc = getattr(self, 'visible_cats', {k: True for k in ['basic','cols','docs','secs','thirds','wave','filters']})
         s  = "■"
         W  = ft.Colors.WHITE
         for n in self.history_nums[-8:]:
@@ -2721,6 +2734,16 @@ class LinupApp:
                         cells += [(s if n in GRUPOS_MAESTROS[f'{g}_L'] else "", col) for g in grps]
                     else:
                         cells += [(s if n in GRUPOS_MAESTROS[g] else "", col) for g in grps]
+            # Add filter columns
+            if vc.get('filters', True):
+                cells += [
+                    (s if n in GRUPOS_MAESTROS['R'] else "", '#c0392b'),
+                    (s if n in GRUPOS_MAESTROS['B'] else "", '#222222'),
+                    (s if n in GRUPOS_MAESTROS['Even'] else "", '#446644'),
+                    (s if n in GRUPOS_MAESTROS['Odd'] else "", '#664444'),
+                    (s if n in GRUPOS_MAESTROS['1-18'] else "", '#555577'),
+                    (s if n in GRUPOS_MAESTROS['19-36'] else "", '#445566'),
+                ]
             self.reg_rows_box.controls.append(
                 ft.Row(
                     controls=[
