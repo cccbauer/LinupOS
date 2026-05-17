@@ -2595,7 +2595,7 @@ class LinupApp:
             # Color map for filter buttons
             filter_colors = {
                 'R': '#cc0000',      # Red
-                'B': '#444444',      # Black - gray when not pressed
+                'B': '#888888',      # Black - gray when not pressed
                 '1-18': '#888888',   # Gray
                 'Even': '#888888',   # Gray
                 'Odd': '#888888',    # Gray
@@ -2608,6 +2608,12 @@ class LinupApp:
                 btn_color = filter_colors[g]
                 # Use smaller text for longer labels to fit single line
                 text_size = 11 if g in ('1-18', '19-36') else 12
+                # For black button, use dark overlay to go really black when pressed
+                # For others, use light overlay
+                overlay = {
+                    ft.ControlState.PRESSED: ft.Colors.with_opacity(0.7, '#000000') if g == 'B'
+                                            else ft.Colors.with_opacity(0.4, ft.Colors.WHITE),
+                }
                 btn = ft.ElevatedButton(
                     content=self._txt(g, size=text_size),
                     data={'name': g, 'color': btn_color},
@@ -2616,9 +2622,7 @@ class LinupApp:
                     style=ft.ButtonStyle(
                         bgcolor=btn_color, color=ft.Colors.WHITE,
                         animation_duration=400,
-                        overlay_color={
-                            ft.ControlState.PRESSED: ft.Colors.with_opacity(0.4, ft.Colors.WHITE),
-                        },
+                        overlay_color=overlay,
                     ),
                 )
                 self.mixer_btns[g] = btn
