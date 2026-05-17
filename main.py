@@ -1115,7 +1115,10 @@ class LinupApp:
                 if saved_sessions:
                     # CHIPS: running total in USD; FIAT: running total in dollars
                     running = total_usd_cap if db_inv_type == 'CHIPS' else float(inv_capital)
-                    for s_num, s_date, s_mesa, s_profit, s_pct in saved_sessions:
+                    
+                    # Build scrollable sessions list (max 10)
+                    scroll_sessions = []
+                    for s_num, s_date, s_mesa, s_profit, s_pct in saved_sessions[:10]:
                         if db_inv_type == 'CHIPS':
                             disp = s_profit * mesa_usd_rate.get(s_mesa, 0.0)
                         else:
@@ -1126,7 +1129,7 @@ class LinupApp:
                         chip_pfx = (f"{'+' if s_profit >= 0 else ''}"
                                     f"{int(round(s_profit)):,}  "
                                     if db_inv_type == 'CHIPS' else "")
-                        session_rows.append(
+                        scroll_sessions.append(
                             ft.Container(
                                 bgcolor='#1a1a2e', border_radius=4,
                                 padding=ft.padding.symmetric(horizontal=8, vertical=4),
@@ -1142,6 +1145,17 @@ class LinupApp:
                                 ], spacing=6),
                             )
                         )
+                    
+                    # Add scrollable sessions listview
+                    session_rows.append(
+                        ft.ListView(
+                            controls=scroll_sessions,
+                            height=250,
+                            expand=False,
+                        )
+                    )
+                    
+                    # Add running total after scrollable area
                     run_base = total_usd_cap if db_inv_type == 'CHIPS' else float(inv_capital)
                     run_col  = '#2ecc71' if running >= run_base else '#ff4444'
                     run_diff = running - run_base
@@ -2776,7 +2790,7 @@ class LinupApp:
         vc = getattr(self, 'visible_cats', {k: True for k in ['basic','cols','docs','secs','thirds','wave','filters']})
         s  = "■"
         W  = ft.Colors.WHITE
-        for n in self.history_nums[-8:]:
+        for n in self.history_nums[-9:]:
             cells = [(str(n), '#f1c40f')]
             if vc.get('basic', True):
                 cells += [
