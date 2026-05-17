@@ -3145,13 +3145,13 @@ class LinupApp:
         CN   = 50   # number cell size (double, -10%)
         GAP  = 2
 
-        # Multiplicity colors for border: 1x=red, 2x=orange, 3x=cyan, 4x=blue, 5x=yellow (like sniper on)
+        # Multiplicity colors for border: 1x=red, 2x=orange, 3x=cyan, 4x=blue, 5x=bright yellow (like sniper on)
         SAFETY_COLORS = {
             1: '#c0392b',    # deep red - lowest
             2: '#e67e22',    # orange
             3: '#1abc9c',    # cyan/turquoise - distinctive
             4: '#3498db',    # bright blue
-            5: '#f1c40f',    # yellow - same as sniper on, highest
+            5: '#ffdd00',    # bright yellow - same as sniper on, highest
         }
         
         def num_bg(num):
@@ -3165,7 +3165,7 @@ class LinupApp:
             """Border color based on safety level or sniper mode"""
             if self.sniper_mode:
                 # In sniper mode: yellow border for intersection, dim gray for non-intersection
-                return '#f1c40f' if (num in all_nums) else '#444'
+                return '#ffdd00' if (num in all_nums) else '#444'
             else:
                 # Show safety level color as border; gray if doesn't meet filter
                 if safety >= min_safety_filter:
@@ -3177,7 +3177,7 @@ class LinupApp:
             # Cell is lit if in intersection (sniper mode) or always when sniper OFF
             if self.sniper_mode:
                 lit = num in all_nums
-                border_color = '#f1c40f' if lit else '#444'
+                border_color = '#ffdd00' if lit else '#444'
             else:
                 # Sniper OFF: show all numbers with multiplicity label
                 lit = True  # always lit in sniper OFF
@@ -3218,7 +3218,7 @@ class LinupApp:
         # Zero row: green background, border color based on mode
         if self.sniper_mode:
             zero_lit = 0 in all_nums
-            zero_border_color = '#f1c40f' if zero_lit else '#444'
+            zero_border_color = '#ffdd00' if zero_lit else '#444'
             zero_content = ft.Text("0", size=14, color=ft.Colors.WHITE,
                                   weight=ft.FontWeight.BOLD,
                                   text_align=ft.TextAlign.CENTER)
