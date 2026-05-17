@@ -2538,8 +2538,8 @@ class LinupApp:
             ('secs',   ['Z0', 'ZG', 'ZP', 'H'],          C_SEC),
             ('thirds', ['T1', 'T2', 'T3'],               C_SET),
             ('wave',   ['W1', 'W2', 'W3'],               C_WAV),
-            ('filters', ['R', 'B', 'Even', 'Odd', '1-18', '19-36'], '#FF6B00'),  # Orange for filters
         ]
+        # Regular categories
         cats = [(grps, col) for key, grps, col in all_cats if vc.get(key, True)]
         mixer_rows = []
         for grps, col in cats:
@@ -2561,6 +2561,39 @@ class LinupApp:
                 self.mixer_btns[g] = btn
                 row_btns.append(btn)
             mixer_rows.append(ft.Row(controls=row_btns, spacing=2))
+        
+        # Filter buttons with roulette table layout and individual colors
+        if vc.get('filters', True):
+            # Color map for filter buttons
+            filter_colors = {
+                'R': '#cc0000',      # Red
+                'B': '#222222',      # Black
+                '1-18': '#888888',   # Gray
+                'Even': '#888888',   # Gray
+                'Odd': '#888888',    # Gray
+                '19-36': '#888888',  # Gray
+            }
+            # Roulette table layout: 1-18 | Even | Red | Black | Odd | 19-36
+            filter_order = ['1-18', 'Even', 'R', 'B', 'Odd', '19-36']
+            filter_row_btns = []
+            for g in filter_order:
+                btn_color = filter_colors[g]
+                btn = ft.ElevatedButton(
+                    content=self._txt(g),
+                    data={'name': g, 'color': btn_color},
+                    on_click=self.seleccionar_mixer,
+                    expand=True, height=40,
+                    style=ft.ButtonStyle(
+                        bgcolor=btn_color, color=ft.Colors.WHITE,
+                        animation_duration=400,
+                        overlay_color={
+                            ft.ControlState.PRESSED: ft.Colors.with_opacity(0.4, ft.Colors.WHITE),
+                        },
+                    ),
+                )
+                self.mixer_btns[g] = btn
+                filter_row_btns.append(btn)
+            mixer_rows.append(ft.Row(controls=filter_row_btns, spacing=2))
 
         mixer_box = ft.Container(
             padding=ft.padding.symmetric(horizontal=2),
