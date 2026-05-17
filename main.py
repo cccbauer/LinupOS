@@ -1169,7 +1169,7 @@ class LinupApp:
                     bgcolor='#111111', border_radius=6,
                     padding=8, margin=ft.margin.only(top=10),
                     height=300,
-                    content=ft.Column(controls=session_rows, spacing=2, scroll=ft.ScrollMode.VERTICAL),
+                    content=ft.Column(controls=session_rows, spacing=2, scroll=ft.ScrollMode.AUTO),
                 ))
 
                 # ── Bottom action buttons ───────────────────────────────
@@ -2710,7 +2710,7 @@ class LinupApp:
         bitacora = ft.Container(
             height=170, bgcolor='#0d0d0d',
             content=ft.Column(
-                scroll=ft.ScrollMode.VERTICAL,
+                scroll=ft.ScrollMode.AUTO,
                 controls=[self.reg_header_row, self.reg_rows_box],
                 spacing=0, tight=True,
             ),
