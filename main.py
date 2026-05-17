@@ -3145,13 +3145,13 @@ class LinupApp:
         CN   = 50   # number cell size (double, -10%)
         GAP  = 2
 
-        # Safety level colors for border: 1=red, 2=orange, 3=yellow, 4=green, 5=blue
+        # Multiplicity colors for border: 1x=red, 2x=orange, 3x=cyan, 4x=blue, 5x=yellow (like sniper on)
         SAFETY_COLORS = {
-            1: '#e74c3c',    # red
+            1: '#c0392b',    # deep red - lowest
             2: '#e67e22',    # orange
-            3: '#f39c12',    # yellow
-            4: '#27ae60',    # green
-            5: '#3498db',    # blue
+            3: '#1abc9c',    # cyan/turquoise - distinctive
+            4: '#3498db',    # bright blue
+            5: '#f1c40f',    # yellow - same as sniper on, highest
         }
         
         def num_bg(num):
