@@ -3103,13 +3103,13 @@ class LinupApp:
             safety_levels = {n: 1 for n in all_nums}  # all shown numbers have same "safety"
             min_safety_filter = 1
         else:
-            # Show all possible numbers from all active groups with safety levels
+            # Show all possible numbers from all active groups with multiplicity
             all_nums: set = set()
             for g in self.grupos_activos:
                 if g in GRUPOS_MAESTROS:
                     all_nums |= GRUPOS_MAESTROS[g]
             safety_levels = self._compute_safety_levels()
-            min_safety_filter = self.sniper_safety_level
+            min_safety_filter = 0  # Show all numbers, no filtering
         
         total_cost, _ = self._compute_bet()   # exact amount that will hit the bank
 
@@ -3174,14 +3174,30 @@ class LinupApp:
                     return '#222'  # very dark for filtered-out numbers
 
         def make_cell(num):
-            # Cell is lit if in intersection (sniper mode) or meets safety filter
+            # Cell is lit if in intersection (sniper mode) or always when sniper OFF
             if self.sniper_mode:
                 lit = num in all_nums
                 border_color = '#f1c40f' if lit else '#444'
             else:
+                # Sniper OFF: show all numbers with multiplicity label
+                lit = True  # always lit in sniper OFF
                 safety = safety_levels.get(num, 0)
-                lit = safety >= min_safety_filter
-                border_color = SAFETY_COLORS.get(safety, '#888') if lit else '#222'
+                border_color = SAFETY_COLORS.get(safety, '#888')
+            
+            # Add multiplicity label when sniper OFF
+            multiplicity_text = None
+            if not self.sniper_mode:
+                safety = safety_levels.get(num, 0)
+                if safety > 0:
+                    multiplicity_text = f"{safety}x"
+            
+            content_controls = [ft.Text(str(num), size=14, color=ft.Colors.WHITE,
+                                      weight=ft.FontWeight.BOLD,
+                                      text_align=ft.TextAlign.CENTER)]
+            if multiplicity_text:
+                content_controls.append(ft.Text(multiplicity_text, size=10, color=ft.Colors.WHITE,
+                                              weight=ft.FontWeight.BOLD,
+                                              text_align=ft.TextAlign.CENTER))
             
             return ft.Container(
                 width=CN, height=CN,
@@ -3191,23 +3207,35 @@ class LinupApp:
                 content=ft.Column(
                     alignment=ft.MainAxisAlignment.CENTER,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    controls=[ft.Text(str(num), size=14, color=ft.Colors.WHITE,
-                                      weight=ft.FontWeight.BOLD,
-                                      text_align=ft.TextAlign.CENTER)],
+                    spacing=0,
+                    controls=content_controls,
                 ),
             )
 
 
         ROW_W = CN * 3 + GAP * 2   # exact pixel width of a number row
 
-        # Zero row: green background, border color based on safety level
+        # Zero row: green background, border color based on mode
         if self.sniper_mode:
             zero_lit = 0 in all_nums
             zero_border_color = '#f1c40f' if zero_lit else '#444'
+            zero_content = ft.Text("0", size=14, color=ft.Colors.WHITE,
+                                  weight=ft.FontWeight.BOLD,
+                                  text_align=ft.TextAlign.CENTER)
         else:
+            # Sniper OFF: always lit, show multiplicity
+            zero_lit = True
             zero_safety = safety_levels.get(0, 0)
-            zero_lit = zero_safety >= min_safety_filter
-            zero_border_color = SAFETY_COLORS.get(zero_safety, '#888') if zero_lit else '#222'
+            zero_border_color = SAFETY_COLORS.get(zero_safety, '#888')
+            zero_content = ft.Column(
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=0,
+                controls=[ft.Text("0", size=14, color=ft.Colors.WHITE,
+                                 weight=ft.FontWeight.BOLD),
+                         ft.Text(f"{zero_safety}x", size=10, color=ft.Colors.WHITE,
+                                weight=ft.FontWeight.BOLD) if zero_safety > 0 else ft.Container(height=0)]
+            )
         
         zero_row = ft.Container(
             width=ROW_W, height=CELL * 2,
@@ -3215,9 +3243,7 @@ class LinupApp:
             border=ft.Border.all(3 if zero_lit else 0.5, zero_border_color),
             border_radius=6,
             alignment=ft.Alignment(0, 0),
-            content=ft.Text("0", size=14, color=ft.Colors.WHITE,
-                            weight=ft.FontWeight.BOLD,
-                            text_align=ft.TextAlign.CENTER),
+            content=zero_content,
         )
 
         num_rows = []
@@ -3317,46 +3343,6 @@ class LinupApp:
                         text_align=ft.TextAlign.CENTER),
                 mx_row,
             ]
-        
-        # Add safety level selector when NOT in sniper mode
-        if not self.sniper_mode:
-            _safety_refs: dict = {}
-            
-            def _make_safety(level):
-                def handler(_ev):
-                    self.sniper_safety_level = level
-                    # Recompute display
-                    for k, b in _safety_refs.items():
-                        b.style = ft.ButtonStyle(
-                            bgcolor=SAFETY_COLORS.get(k, '#3a3a3a') if k == level else '#2a2a2a',
-                            color=ft.Colors.WHITE,
-                        )
-                        b.update()
-                    # Refresh grid with new filter
-                    dlg.update()
-                return handler
-            
-            safety_row = ft.Row(spacing=3, tight=True)
-            for _lvl in range(1, 6):
-                _sb = ft.ElevatedButton(
-                    content=ft.Text(f"{_lvl}", size=11,
-                                    weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                    expand=True, height=34,
-                    style=ft.ButtonStyle(
-                        bgcolor=SAFETY_COLORS.get(_lvl, '#3a3a3a') if _lvl == self.sniper_safety_level else '#2a2a2a',
-                        color=ft.Colors.WHITE,
-                    ),
-                    on_click=_make_safety(_lvl),
-                )
-                _safety_refs[_lvl] = _sb
-                safety_row.controls.append(_sb)
-            
-            popup_extra.extend([
-                ft.Container(height=6),
-                ft.Text("SAFETY LEVEL", color='#aaaaaa', size=10,
-                        text_align=ft.TextAlign.CENTER),
-                safety_row,
-            ])
 
         dlg.content = ft.Column(
             tight=True,
