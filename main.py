@@ -2377,10 +2377,10 @@ class LinupApp:
         self.prog_on     = True
         self.fixed_multi = 1
 
-        _PROG_ON_COLOR    = '#2ecc71'
-        _PROG_OFF_COLOR   = '#e67e22'
-        _SNIPER_ON_COLOR  = '#e74c3c'
-        _SNIPER_OFF_COLOR = '#7f8c8d'
+        _PROG_ON_COLOR    = '#2ecc71'     # green
+        _PROG_OFF_COLOR   = '#e67e22'     # orange
+        _SNIPER_ON_COLOR  = '#2ecc71'     # green (harmonized with prog ON)
+        _SNIPER_OFF_COLOR = '#e67e22'     # orange (harmonized with prog OFF)
         _MULTI_ACT        = '#f39c12'
         _MULTI_INACT      = '#3a3a3a'
 
@@ -2985,17 +2985,23 @@ class LinupApp:
         for g, btn in self.mixer_btns.items():
             base_color = btn.data['color']
             if g in active_display:
+                # Selected: yellow border + yellow text
                 btn.style = ft.ButtonStyle(
-                    bgcolor=base_color, color='#f1c40f',
+                    bgcolor=base_color, color='#ffdd00',
+                    border=ft.border.all(2, '#ffdd00'),
                     animation_duration=400,
                     overlay_color={ft.ControlState.PRESSED: ft.Colors.with_opacity(0.4, ft.Colors.WHITE)},
                 )
             elif has_sel:
+                # Deselected (others selected): dimmed base color, no border
+                dimmed_color = ft.Colors.with_opacity(0.5, base_color)
                 btn.style = ft.ButtonStyle(
-                    bgcolor='#2a2a2a', color='#444444',
+                    bgcolor=dimmed_color, color='#666666',
+                    border=ft.border.all(1, '#333333'),
                     animation_duration=400,
                 )
             else:
+                # Unselected (no active): full color with white text
                 btn.style = ft.ButtonStyle(
                     bgcolor=base_color, color=ft.Colors.WHITE,
                     animation_duration=400,
