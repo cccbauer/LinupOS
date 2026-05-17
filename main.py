@@ -404,7 +404,7 @@ class LinupApp:
         self.live_table_mode      = False
         self.live_filter          = None   # None, 'R', 'B'
         self.prog_on              = True   # progression on/off
-        self.sniper_mode          = False  # sniper mode on/off (intersection of groups)
+        self.sniper_mode          = True   # sniper mode on/off (intersection of groups) - default ON
         self.sniper_safety_level  = 1      # 1-5 safety level when sniper is off
         self.fixed_multi          = 1      # 1-5 when progression is off
         self.grupos_activos       = []
@@ -2595,7 +2595,7 @@ class LinupApp:
             # Color map for filter buttons
             filter_colors = {
                 'R': '#cc0000',      # Red
-                'B': '#222222',      # Black
+                'B': '#444444',      # Black (brighter for visibility)
                 '1-18': '#888888',   # Gray
                 'Even': '#888888',   # Gray
                 'Odd': '#888888',    # Gray
