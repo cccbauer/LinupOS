@@ -2887,7 +2887,26 @@ class LinupApp:
                 total      = self.val_fout * multi * n  # 1 chip per group × n groups × multi
                 win_payout = self.val_fout * multi * 3  # one winning group pays 3:1
         else:
-            total      = sum(self._group_cost(g) * multi for g in self.grupos_activos)
+            # Inside bets: account for sniper mode
+            if self.sniper_mode:
+                # Sniper ON: use intersection size
+                intersection = self._compute_intersection()
+                if intersection:
+                    num_chips = len(intersection)
+                else:
+                    # Fallback to union if no intersection
+                    all_nums = set()
+                    for g in self.grupos_activos:
+                        if g in GRUPOS_MAESTROS:
+                            all_nums |= GRUPOS_MAESTROS[g]
+                    num_chips = len(all_nums)
+                total = self.val_fin * num_chips * multi
+            else:
+                # Sniper OFF: use multiplicity-weighted cost
+                safety_levels = self._compute_safety_levels()
+                num_chips_weighted = sum(safety for safety in safety_levels.values())
+                total = self.val_fin * num_chips_weighted * multi
+            
             win_payout = self.val_fin * 36 * multi
 
         return total, win_payout
