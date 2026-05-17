@@ -2985,19 +2985,17 @@ class LinupApp:
         for g, btn in self.mixer_btns.items():
             base_color = btn.data['color']
             if g in active_display:
-                # Selected: yellow border + yellow text
+                # Selected: yellow text (#ffdd00) + bright background
                 btn.style = ft.ButtonStyle(
                     bgcolor=base_color, color='#ffdd00',
-                    border=ft.border.all(2, '#ffdd00'),
                     animation_duration=400,
                     overlay_color={ft.ControlState.PRESSED: ft.Colors.with_opacity(0.4, ft.Colors.WHITE)},
                 )
             elif has_sel:
-                # Deselected (others selected): dimmed base color, no border
+                # Deselected (others selected): dimmed base color + dim text
                 dimmed_color = ft.Colors.with_opacity(0.5, base_color)
                 btn.style = ft.ButtonStyle(
                     bgcolor=dimmed_color, color='#666666',
-                    border=ft.border.all(1, '#333333'),
                     animation_duration=400,
                 )
             else:
