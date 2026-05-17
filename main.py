@@ -2424,14 +2424,6 @@ class LinupApp:
 
         def _toggle_sniper(_e):
             self.sniper_mode = not self.sniper_mode
-            # When turning sniper OFF, enforce group selection limit
-            if not self.sniper_mode:
-                SECTORS = {'Z0', 'ZG', 'ZP', 'H'}
-                all_sectors = all(x in SECTORS for x in self.grupos_activos)
-                limit = 3 if all_sectors else 2
-                # Truncate excess groups
-                if len(self.grupos_activos) > limit:
-                    self.grupos_activos = self.grupos_activos[:limit]
             _sniper_lbl.value = "SNIPER: ON" if self.sniper_mode else "SNIPER: OFF"
             _sniper_ref[0].style = ft.ButtonStyle(
                 bgcolor=_SNIPER_ON_COLOR if self.sniper_mode else _SNIPER_OFF_COLOR,
@@ -3068,7 +3060,6 @@ class LinupApp:
         return result if result is not None else set()
 
     def seleccionar_mixer(self, e):
-        SECTORS = {'Z0', 'ZG', 'ZP', 'H'}
         g = e.control.data['name']
         # In Live Table mode, map dozens/columns to their live/filtered variants
         actual_g = g
@@ -3083,14 +3074,8 @@ class LinupApp:
             self.grupos_activos = [x for x in self.grupos_activos
                                    if self._to_display_name(x) != g]
         else:
-            all_sectors = all(x in SECTORS for x in self.grupos_activos) and g in SECTORS
-            # In sniper mode: unlimited selections; otherwise: cap at 3 sectors or 2 others
-            if self.sniper_mode:
-                limit = 999  # effectively unlimited
-            else:
-                limit = 3 if all_sectors else 2
-            if len(self.grupos_activos) < limit:
-                self.grupos_activos.append(actual_g)
+            # Always allow unlimited selections
+            self.grupos_activos.append(actual_g)
         self._refresh_mixer_colors()
         self.update_inv_label()
         self.lbl_inv.update()
