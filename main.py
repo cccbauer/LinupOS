@@ -3111,7 +3111,8 @@ class LinupApp:
             safety_levels = self._compute_safety_levels()
             min_safety_filter = 0  # Show all numbers, no filtering
         
-        total_cost, _ = self._compute_bet()   # exact amount that will hit the bank
+        # Calculate max safety level for highlighting with yellow in sniper OFF mode
+        max_safety = max(safety_levels.values()) if safety_levels else 0
 
         # Color: use first group's color, or blended label if two
         def grp_color(g):
@@ -3145,13 +3146,13 @@ class LinupApp:
         CN   = 50   # number cell size (double, -10%)
         GAP  = 2
 
-        # Multiplicity colors for border: 1x=red, 2x=orange, 3x=cyan, 4x=blue, 5x=bright yellow (like sniper on)
+        # Multiplicity colors for border: 1x=red, 2x=orange, 3x=cyan, 4x=blue; max level always yellow
         SAFETY_COLORS = {
-            1: '#c0392b',    # deep red - lowest
+            1: '#c0392b',    # deep red - lowest multiplicity
             2: '#e67e22',    # orange
             3: '#1abc9c',    # cyan/turquoise - distinctive
             4: '#3498db',    # bright blue
-            5: '#ffdd00',    # bright yellow - same as sniper on, highest
+            5: '#3498db',    # bright blue (max is yellow, so this is fallback)
         }
         
         def num_bg(num):
@@ -3182,7 +3183,11 @@ class LinupApp:
                 # Sniper OFF: show all numbers with multiplicity label
                 lit = True  # always lit in sniper OFF
                 safety = safety_levels.get(num, 0)
-                border_color = SAFETY_COLORS.get(safety, '#888')
+                # Use yellow for the highest multiplicity level, otherwise use SAFETY_COLORS
+                if safety == max_safety and max_safety > 0:
+                    border_color = '#ffdd00'
+                else:
+                    border_color = SAFETY_COLORS.get(safety, '#888')
             
             # Add multiplicity label when sniper OFF
             multiplicity_text = None
@@ -3226,7 +3231,11 @@ class LinupApp:
             # Sniper OFF: always lit, show multiplicity
             zero_lit = True
             zero_safety = safety_levels.get(0, 0)
-            zero_border_color = SAFETY_COLORS.get(zero_safety, '#888')
+            # Use yellow for the highest multiplicity level, otherwise use SAFETY_COLORS
+            if zero_safety == max_safety and max_safety > 0:
+                zero_border_color = '#ffdd00'
+            else:
+                zero_border_color = SAFETY_COLORS.get(zero_safety, '#888')
             zero_content = ft.Column(
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
