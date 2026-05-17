@@ -2992,10 +2992,10 @@ class LinupApp:
                     overlay_color={ft.ControlState.PRESSED: ft.Colors.with_opacity(0.4, ft.Colors.WHITE)},
                 )
             elif has_sel:
-                # Deselected (others selected): dimmed base color + dim text
+                # Deselected (others selected): dimmed base color + white text for visibility
                 dimmed_color = ft.Colors.with_opacity(0.5, base_color)
                 btn.style = ft.ButtonStyle(
-                    bgcolor=dimmed_color, color='#666666',
+                    bgcolor=dimmed_color, color=ft.Colors.WHITE,
                     animation_duration=400,
                 )
             else:
