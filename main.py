@@ -2424,6 +2424,14 @@ class LinupApp:
 
         def _toggle_sniper(_e):
             self.sniper_mode = not self.sniper_mode
+            # When turning sniper OFF, enforce group selection limit
+            if not self.sniper_mode:
+                SECTORS = {'Z0', 'ZG', 'ZP', 'H'}
+                all_sectors = all(x in SECTORS for x in self.grupos_activos)
+                limit = 3 if all_sectors else 2
+                # Truncate excess groups
+                if len(self.grupos_activos) > limit:
+                    self.grupos_activos = self.grupos_activos[:limit]
             _sniper_lbl.value = "SNIPER: ON" if self.sniper_mode else "SNIPER: OFF"
             _sniper_ref[0].style = ft.ButtonStyle(
                 bgcolor=_SNIPER_ON_COLOR if self.sniper_mode else _SNIPER_OFF_COLOR,
@@ -2431,6 +2439,7 @@ class LinupApp:
             )
             _sniper_ref[0].update()
             _sniper_lbl.update()
+            self._refresh_mixer_colors()
             self.update_inv_label()
             if self.lbl_inv:
                 self.lbl_inv.update()
@@ -3052,10 +3061,19 @@ class LinupApp:
         multi        = self._current_multi(is_out=False)
         chip_per_num = self.val_fin * multi
 
-        # Sniper mode: only show intersection of all active groups
+        # Sniper mode: show intersection, fallback to union if empty
         if self.sniper_mode:
-            all_nums = self._compute_intersection()
-            safety_levels = {n: 1 for n in all_nums}  # all intersection numbers have same "safety"
+            intersection = self._compute_intersection()
+            # If no overlap, show union instead (all numbers from selected groups)
+            if intersection:
+                all_nums = intersection
+            else:
+                # Union: all numbers from any of the selected groups
+                all_nums = set()
+                for g in self.grupos_activos:
+                    if g in GRUPOS_MAESTROS:
+                        all_nums |= GRUPOS_MAESTROS[g]
+            safety_levels = {n: 1 for n in all_nums}  # all shown numbers have same "safety"
             min_safety_filter = 1
         else:
             # Show all possible numbers from all active groups with safety levels
