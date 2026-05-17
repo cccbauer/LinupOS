@@ -1115,9 +1115,6 @@ class LinupApp:
                 if saved_sessions:
                     # CHIPS: running total in USD; FIAT: running total in dollars
                     running = total_usd_cap if db_inv_type == 'CHIPS' else float(inv_capital)
-                    
-                    # Build scrollable sessions list (max 10)
-                    scroll_sessions = []
                     for s_num, s_date, s_mesa, s_profit, s_pct in saved_sessions[:10]:
                         if db_inv_type == 'CHIPS':
                             disp = s_profit * mesa_usd_rate.get(s_mesa, 0.0)
@@ -1129,7 +1126,7 @@ class LinupApp:
                         chip_pfx = (f"{'+' if s_profit >= 0 else ''}"
                                     f"{int(round(s_profit)):,}  "
                                     if db_inv_type == 'CHIPS' else "")
-                        scroll_sessions.append(
+                        session_rows.append(
                             ft.Container(
                                 bgcolor='#1a1a2e', border_radius=4,
                                 padding=ft.padding.symmetric(horizontal=8, vertical=4),
@@ -1145,17 +1142,6 @@ class LinupApp:
                                 ], spacing=6),
                             )
                         )
-                    
-                    # Add scrollable sessions listview
-                    session_rows.append(
-                        ft.ListView(
-                            controls=scroll_sessions,
-                            height=250,
-                            expand=False,
-                        )
-                    )
-                    
-                    # Add running total after scrollable area
                     run_base = total_usd_cap if db_inv_type == 'CHIPS' else float(inv_capital)
                     run_col  = '#2ecc71' if running >= run_base else '#ff4444'
                     run_diff = running - run_base
@@ -1182,7 +1168,8 @@ class LinupApp:
                 table_rows.append(ft.Container(
                     bgcolor='#111111', border_radius=6,
                     padding=8, margin=ft.margin.only(top=10),
-                    content=ft.Column(controls=session_rows, spacing=2),
+                    height=300,
+                    content=ft.Column(controls=session_rows, spacing=2, scroll=ft.ScrollMode.VERTICAL),
                 ))
 
                 # ── Bottom action buttons ───────────────────────────────
@@ -2722,14 +2709,10 @@ class LinupApp:
 
         bitacora = ft.Container(
             height=170, bgcolor='#0d0d0d',
-            content=ft.Row(
-                scroll=ft.ScrollMode.AUTO,
-                controls=[
-                    ft.Column(
-                        controls=[self.reg_header_row, self.reg_rows_box],
-                        spacing=0, tight=True,
-                    )
-                ],
+            content=ft.Column(
+                scroll=ft.ScrollMode.VERTICAL,
+                controls=[self.reg_header_row, self.reg_rows_box],
+                spacing=0, tight=True,
             ),
         )
 
