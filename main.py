@@ -2704,7 +2704,7 @@ class LinupApp:
         )
 
         self.reg_header_row = ft.Row(controls=[], spacing=0)
-        self.reg_rows_box   = ft.Column(controls=[], spacing=0)
+        self.reg_rows_box   = ft.ListView(controls=[], spacing=0)
         self._rebuild_table_header()
 
         bitacora = ft.Container(
@@ -2715,11 +2715,7 @@ class LinupApp:
                     self.reg_header_row,
                     ft.Container(
                         expand=True,
-                        content=ft.Column(
-                            scroll=ft.ScrollMode.AUTO,
-                            controls=[self.reg_rows_box],
-                            spacing=0, tight=True,
-                        ),
+                        content=self.reg_rows_box,
                     ),
                 ],
             ),
