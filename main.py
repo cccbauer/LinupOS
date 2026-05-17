@@ -1115,7 +1115,7 @@ class LinupApp:
                 if saved_sessions:
                     # CHIPS: running total in USD; FIAT: running total in dollars
                     running = total_usd_cap if db_inv_type == 'CHIPS' else float(inv_capital)
-                    for s_num, s_date, s_mesa, s_profit, s_pct in saved_sessions[:10]:
+                    for s_num, s_date, s_mesa, s_profit, s_pct in saved_sessions:
                         if db_inv_type == 'CHIPS':
                             disp = s_profit * mesa_usd_rate.get(s_mesa, 0.0)
                         else:
@@ -2710,9 +2710,18 @@ class LinupApp:
         bitacora = ft.Container(
             height=170, bgcolor='#0d0d0d',
             content=ft.Column(
-                scroll=ft.ScrollMode.AUTO,
-                controls=[self.reg_header_row, self.reg_rows_box],
-                spacing=0, tight=True,
+                spacing=0,
+                controls=[
+                    self.reg_header_row,
+                    ft.Container(
+                        expand=True,
+                        content=ft.Column(
+                            scroll=ft.ScrollMode.AUTO,
+                            controls=[self.reg_rows_box],
+                            spacing=0, tight=True,
+                        ),
+                    ),
+                ],
             ),
         )
 
