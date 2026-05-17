@@ -3110,9 +3110,8 @@ class LinupApp:
                     all_nums |= GRUPOS_MAESTROS[g]
             safety_levels = self._compute_safety_levels()
             min_safety_filter = 0  # Show all numbers, no filtering
-        
-        # Calculate max safety level for highlighting with yellow in sniper OFF mode
-        max_safety = max(safety_levels.values()) if safety_levels else 0
+            # Calculate max safety level for highlighting with yellow in sniper OFF mode
+            max_safety = max(safety_levels.values()) if safety_levels else 0
 
         # Color: use first group's color, or blended label if two
         def grp_color(g):
