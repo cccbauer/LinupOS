@@ -2711,10 +2711,12 @@ class LinupApp:
             height=170, bgcolor='#0d0d0d',
             content=ft.Column(
                 spacing=0,
-                scroll=ft.ScrollMode.AUTO,
                 controls=[
                     self.reg_header_row,
-                    self.reg_rows_box,
+                    ft.Container(
+                        expand=True,
+                        content=self.reg_rows_box,
+                    ),
                 ],
             ),
         )
