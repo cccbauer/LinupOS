@@ -2704,13 +2704,14 @@ class LinupApp:
         )
 
         self.reg_header_row = ft.Row(controls=[], spacing=0)
-        self.reg_rows_box   = ft.ListView(controls=[], spacing=0, expand=True)
+        self.reg_rows_box   = ft.ListView(controls=[], spacing=0)
         self._rebuild_table_header()
 
         bitacora = ft.Container(
             height=170, bgcolor='#0d0d0d',
             content=ft.Column(
                 spacing=0,
+                scroll=ft.ScrollMode.AUTO,
                 controls=[
                     self.reg_header_row,
                     self.reg_rows_box,
