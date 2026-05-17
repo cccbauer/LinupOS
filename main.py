@@ -3101,7 +3101,7 @@ class LinupApp:
         CN   = 50   # number cell size (double, -10%)
         GAP  = 2
 
-        # Safety level colors: 1=red, 2=orange, 3=yellow, 4=green, 5=blue
+        # Safety level colors for border: 1=red, 2=orange, 3=yellow, 4=green, 5=blue
         SAFETY_COLORS = {
             1: '#e74c3c',    # red
             2: '#e67e22',    # orange
@@ -3111,32 +3111,38 @@ class LinupApp:
         }
         
         def num_bg(num):
+            """Original roulette colors: red for ROJOS, black for others, green for zero"""
             if num == 0:
                 return '#27ae60'
-            elif self.sniper_mode:
-                # In sniper mode, show standard colors
-                return '#c0392b' if num in ROJOS else '#2c3e50'
             else:
-                # Show safety level color
-                safety = safety_levels.get(num, 0)
+                return '#c0392b' if num in ROJOS else '#2c3e50'
+        
+        def get_border_color(num, safety):
+            """Border color based on safety level or sniper mode"""
+            if self.sniper_mode:
+                # In sniper mode: yellow border for intersection, dim gray for non-intersection
+                return '#f1c40f' if (num in all_nums) else '#444'
+            else:
+                # Show safety level color as border; gray if doesn't meet filter
                 if safety >= min_safety_filter:
-                    return SAFETY_COLORS.get(safety, '#2c3e50')
+                    return SAFETY_COLORS.get(safety, '#888')
                 else:
-                    return '#1a1a1a'  # dark, not selected
+                    return '#222'  # very dark for filtered-out numbers
 
         def make_cell(num):
             # Cell is lit if in intersection (sniper mode) or meets safety filter
             if self.sniper_mode:
                 lit = num in all_nums
+                border_color = '#f1c40f' if lit else '#444'
             else:
                 safety = safety_levels.get(num, 0)
                 lit = safety >= min_safety_filter
+                border_color = SAFETY_COLORS.get(safety, '#888') if lit else '#222'
             
             return ft.Container(
                 width=CN, height=CN,
                 bgcolor=num_bg(num),
-                border=ft.Border.all(3 if lit else 0.5,
-                                     '#f1c40f' if lit else '#444'),
+                border=ft.Border.all(3 if lit else 0.5, border_color),
                 border_radius=6,
                 content=ft.Column(
                     alignment=ft.MainAxisAlignment.CENTER,
@@ -3150,12 +3156,19 @@ class LinupApp:
 
         ROW_W = CN * 3 + GAP * 2   # exact pixel width of a number row
 
-        zero_lit = (0 in all_nums) if self.sniper_mode else True
+        # Zero row: green background, border color based on safety level
+        if self.sniper_mode:
+            zero_lit = 0 in all_nums
+            zero_border_color = '#f1c40f' if zero_lit else '#444'
+        else:
+            zero_safety = safety_levels.get(0, 0)
+            zero_lit = zero_safety >= min_safety_filter
+            zero_border_color = SAFETY_COLORS.get(zero_safety, '#888') if zero_lit else '#222'
+        
         zero_row = ft.Container(
             width=ROW_W, height=CELL * 2,
             bgcolor='#27ae60',
-            border=ft.Border.all(3 if zero_lit else 0.5,
-                                 '#f1c40f' if zero_lit else '#444'),
+            border=ft.Border.all(3 if zero_lit else 0.5, zero_border_color),
             border_radius=6,
             alignment=ft.Alignment(0, 0),
             content=ft.Text("0", size=14, color=ft.Colors.WHITE,
