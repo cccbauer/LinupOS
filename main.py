@@ -2889,17 +2889,9 @@ class LinupApp:
         else:
             # Inside bets: account for sniper mode
             if self.sniper_mode:
-                # Sniper ON: use intersection size
+                # Sniper ON: use intersection size only (no fallback)
                 intersection = self._compute_intersection()
-                if intersection:
-                    num_chips = len(intersection)
-                else:
-                    # Fallback to union if no intersection
-                    all_nums = set()
-                    for g in self.grupos_activos:
-                        if g in GRUPOS_MAESTROS:
-                            all_nums |= GRUPOS_MAESTROS[g]
-                    num_chips = len(all_nums)
+                num_chips = len(intersection)
                 total = self.val_fin * num_chips * multi
             else:
                 # Sniper OFF: use multiplicity-weighted cost
@@ -3107,18 +3099,10 @@ class LinupApp:
         multi        = self._current_multi(is_out=False)
         chip_per_num = self.val_fin * multi
 
-        # Sniper mode: show intersection, fallback to union if empty
+        # Sniper mode: show intersection only (no fallback)
         if self.sniper_mode:
             intersection = self._compute_intersection()
-            # If no overlap, show union instead (all numbers from selected groups)
-            if intersection:
-                all_nums = intersection
-            else:
-                # Union: all numbers from any of the selected groups
-                all_nums = set()
-                for g in self.grupos_activos:
-                    if g in GRUPOS_MAESTROS:
-                        all_nums |= GRUPOS_MAESTROS[g]
+            all_nums = intersection  # Show only intersection, never fallback to union
             safety_levels = {n: 1 for n in all_nums}  # all shown numbers have same "safety"
             min_safety_filter = 1
         else:
