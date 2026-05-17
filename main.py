@@ -3113,7 +3113,7 @@ class LinupApp:
             # Calculate max safety level for highlighting with yellow in sniper OFF mode
             max_safety = max(safety_levels.values()) if safety_levels else 0
 
-        # Color: use first group's color, or blended label if two
+        total_cost, _ = self._compute_bet()   # exact amount that will hit the bank
         def grp_color(g):
             if g in {'Z0', 'ZG', 'ZP', 'H'}:                   return C_SEC
             if g in {'W1', 'W2', 'W3'}:                         return C_WAV
