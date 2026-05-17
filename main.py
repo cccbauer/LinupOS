@@ -2386,7 +2386,7 @@ class LinupApp:
 
         _prog_lbl   = ft.Text("PROG: ON", color=ft.Colors.WHITE,
                                weight=ft.FontWeight.BOLD, size=11)
-        _sniper_lbl = ft.Text("SNIPER: OFF", color=ft.Colors.WHITE,
+        _sniper_lbl = ft.Text("SNIPER: ON", color=ft.Colors.WHITE,
                                weight=ft.FontWeight.BOLD, size=11)
         _prog_ref   = [None]
         _sniper_ref = [None]
@@ -2451,7 +2451,7 @@ class LinupApp:
 
         _sniper_btn = ft.ElevatedButton(
             content=_sniper_lbl, height=30, expand=2,
-            style=ft.ButtonStyle(bgcolor=_SNIPER_OFF_COLOR, color=ft.Colors.WHITE),
+            style=ft.ButtonStyle(bgcolor=_SNIPER_ON_COLOR, color=ft.Colors.WHITE),
             on_click=_toggle_sniper,
         )
         _sniper_ref[0] = _sniper_btn
@@ -2595,7 +2595,7 @@ class LinupApp:
             # Color map for filter buttons
             filter_colors = {
                 'R': '#cc0000',      # Red
-                'B': '#1a1a1a',      # Black (really black)
+                'B': '#444444',      # Black - gray when not pressed
                 '1-18': '#888888',   # Gray
                 'Even': '#888888',   # Gray
                 'Odd': '#888888',    # Gray
@@ -2606,8 +2606,10 @@ class LinupApp:
             filter_row_btns = []
             for g in filter_order:
                 btn_color = filter_colors[g]
+                # Use smaller text for longer labels to fit single line
+                text_size = 11 if g in ('1-18', '19-36') else 12
                 btn = ft.ElevatedButton(
-                    content=self._txt(g, size=12),  # Smaller font for filter buttons
+                    content=self._txt(g, size=text_size),
                     data={'name': g, 'color': btn_color},
                     on_click=self.seleccionar_mixer,
                     expand=True, height=40,
