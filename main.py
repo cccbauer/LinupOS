@@ -3013,17 +3013,59 @@ class LinupApp:
         return levels
 
     def _compute_intersection(self):
-        """Compute intersection of all active groups (sniper mode).
-        Returns set of numbers that hit ALL active groups."""
-        # Use ALL active groups, not just straight ones
+        """Sniper mode: smart intersection across group types, union within types.
+        
+        Examples:
+        - Z0 + ZG (both sectors): UNION of sectors
+        - Z0 + ZG + R (sectors + color): (Z0 ∪ ZG) ∩ R
+        - Z0 + ZG + 1a + Even: (Z0 ∪ ZG) ∩ (1a) ∩ (Even)
+        - 1a + 2a + R: (1a ∪ 2a) ∩ R
+        """
         active_groups = [g for g in self.grupos_activos
-                        if g in GRUPOS_MAESTROS]  # make sure group exists
+                        if g in GRUPOS_MAESTROS]
         if not active_groups:
             return set()
-        intersection = GRUPOS_MAESTROS[active_groups[0]].copy()
-        for g in active_groups[1:]:
-            intersection &= GRUPOS_MAESTROS[g]
-        return intersection
+        
+        # Categorize groups by type
+        def get_group_type(g):
+            if g in {'Z0', 'ZG', 'ZP', 'H'}:
+                return 'SECTOR'
+            elif g in {'T1', 'T2', 'T3'}:
+                return 'WHEEL'
+            elif g in {'W1', 'W2', 'W3'}:
+                return 'WAVE'
+            elif g.startswith(('34', '35', '36')):
+                return 'COLUMN'
+            elif g.startswith(('1a', '2a', '3a')):
+                return 'DOZEN'
+            else:  # R, B, Even, Odd, 1-18, 19-36
+                return 'FILTER'
+        
+        # Group by type
+        by_type = {}
+        for g in active_groups:
+            gtype = get_group_type(g)
+            if gtype not in by_type:
+                by_type[gtype] = []
+            by_type[gtype].append(g)
+        
+        # Compute union for each type
+        type_unions = {}
+        for gtype, groups in by_type.items():
+            union = set()
+            for g in groups:
+                union |= GRUPOS_MAESTROS[g]
+            type_unions[gtype] = union
+        
+        # Intersect across types
+        result = None
+        for gtype, union_set in type_unions.items():
+            if result is None:
+                result = union_set.copy()
+            else:
+                result &= union_set
+        
+        return result if result is not None else set()
 
     def seleccionar_mixer(self, e):
         SECTORS = {'Z0', 'ZG', 'ZP', 'H'}
