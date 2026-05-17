@@ -2995,22 +2995,24 @@ class LinupApp:
         """Compute safety level for each number (count of groups that contain it).
         Returns dict {num: count} where count is 0-5."""
         levels = {}
-        straight_groups = [g for g in self.grupos_activos
-                          if g in self.GRUPOS_STRAIGHT or g in GRUPOS_LIVE_INSIDE]
+        # Use ALL active groups, not just straight ones
+        active_groups = [g for g in self.grupos_activos
+                        if g in GRUPOS_MAESTROS]  # make sure group exists
         for num in range(0, 37):
-            count = sum(1 for g in straight_groups if num in GRUPOS_MAESTROS[g])
+            count = sum(1 for g in active_groups if num in GRUPOS_MAESTROS[g])
             levels[num] = count
         return levels
 
     def _compute_intersection(self):
         """Compute intersection of all active groups (sniper mode).
         Returns set of numbers that hit ALL active groups."""
-        straight_groups = [g for g in self.grupos_activos
-                          if g in self.GRUPOS_STRAIGHT or g in GRUPOS_LIVE_INSIDE]
-        if not straight_groups:
+        # Use ALL active groups, not just straight ones
+        active_groups = [g for g in self.grupos_activos
+                        if g in GRUPOS_MAESTROS]  # make sure group exists
+        if not active_groups:
             return set()
-        intersection = GRUPOS_MAESTROS[straight_groups[0]].copy()
-        for g in straight_groups[1:]:
+        intersection = GRUPOS_MAESTROS[active_groups[0]].copy()
+        for g in active_groups[1:]:
             intersection &= GRUPOS_MAESTROS[g]
         return intersection
 
@@ -3050,20 +3052,17 @@ class LinupApp:
         multi        = self._current_multi(is_out=False)
         chip_per_num = self.val_fin * multi
 
-        # Merge all nums from active straight groups (including live inside groups)
-        straight_groups = [g for g in self.grupos_activos
-                           if g in self.GRUPOS_STRAIGHT or g in GRUPOS_LIVE_INSIDE]
-        
-        # Sniper mode: only show intersection
+        # Sniper mode: only show intersection of all active groups
         if self.sniper_mode:
             all_nums = self._compute_intersection()
-            safety_levels = {n: 1 for n in all_nums}  # all have max safety
+            safety_levels = {n: 1 for n in all_nums}  # all intersection numbers have same "safety"
             min_safety_filter = 1
         else:
-            # Show all possible numbers with safety levels
+            # Show all possible numbers from all active groups with safety levels
             all_nums: set = set()
-            for g in straight_groups:
-                all_nums |= GRUPOS_MAESTROS[g]
+            for g in self.grupos_activos:
+                if g in GRUPOS_MAESTROS:
+                    all_nums |= GRUPOS_MAESTROS[g]
             safety_levels = self._compute_safety_levels()
             min_safety_filter = self.sniper_safety_level
         
@@ -3094,7 +3093,7 @@ class LinupApp:
                 content=ft.Text(grp_label(g), color=ft.Colors.WHITE, size=14,
                                 weight=ft.FontWeight.BOLD),
             )
-            for g in straight_groups
+            for g in self.grupos_activos
         ]
 
         CELL = 25   # zero cell size
