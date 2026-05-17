@@ -2595,7 +2595,7 @@ class LinupApp:
             # Color map for filter buttons
             filter_colors = {
                 'R': '#cc0000',      # Red
-                'B': '#444444',      # Black (brighter for visibility)
+                'B': '#1a1a1a',      # Black (really black)
                 '1-18': '#888888',   # Gray
                 'Even': '#888888',   # Gray
                 'Odd': '#888888',    # Gray
@@ -2607,7 +2607,7 @@ class LinupApp:
             for g in filter_order:
                 btn_color = filter_colors[g]
                 btn = ft.ElevatedButton(
-                    content=self._txt(g),
+                    content=self._txt(g, size=12),  # Smaller font for filter buttons
                     data={'name': g, 'color': btn_color},
                     on_click=self.seleccionar_mixer,
                     expand=True, height=40,
