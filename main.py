@@ -404,6 +404,8 @@ class LinupApp:
         self.live_table_mode      = False
         self.live_filter          = None   # None, 'R', 'B'
         self.prog_on              = True   # progression on/off
+        self.sniper_mode          = False  # sniper mode on/off (intersection of groups)
+        self.sniper_safety_level  = 1      # 1-5 safety level when sniper is off
         self.fixed_multi          = 1      # 1-5 when progression is off
         self.grupos_activos       = []
         self.history_nums         = []
@@ -2375,14 +2377,19 @@ class LinupApp:
         self.prog_on     = True
         self.fixed_multi = 1
 
-        _PROG_ON_COLOR  = '#2ecc71'
-        _PROG_OFF_COLOR = '#e67e22'
-        _MULTI_ACT      = '#f39c12'
-        _MULTI_INACT    = '#3a3a3a'
+        _PROG_ON_COLOR    = '#2ecc71'
+        _PROG_OFF_COLOR   = '#e67e22'
+        _SNIPER_ON_COLOR  = '#e74c3c'
+        _SNIPER_OFF_COLOR = '#7f8c8d'
+        _MULTI_ACT        = '#f39c12'
+        _MULTI_INACT      = '#3a3a3a'
 
-        _prog_lbl  = ft.Text("PROG: ON", color=ft.Colors.WHITE,
-                              weight=ft.FontWeight.BOLD, size=11)
-        _prog_ref  = [None]
+        _prog_lbl   = ft.Text("PROG: ON", color=ft.Colors.WHITE,
+                               weight=ft.FontWeight.BOLD, size=11)
+        _sniper_lbl = ft.Text("SNIPER: OFF", color=ft.Colors.WHITE,
+                               weight=ft.FontWeight.BOLD, size=11)
+        _prog_ref   = [None]
+        _sniper_ref = [None]
         _multi_refs: dict = {}   # multiplier int → button ref
 
         def _refresh_prog_ui():
@@ -2415,6 +2422,19 @@ class LinupApp:
                 self.nivel_martingala_in  = 0
             _refresh_prog_ui()
 
+        def _toggle_sniper(_e):
+            self.sniper_mode = not self.sniper_mode
+            _sniper_lbl.value = "SNIPER: ON" if self.sniper_mode else "SNIPER: OFF"
+            _sniper_ref[0].style = ft.ButtonStyle(
+                bgcolor=_SNIPER_ON_COLOR if self.sniper_mode else _SNIPER_OFF_COLOR,
+                color=ft.Colors.WHITE,
+            )
+            _sniper_ref[0].update()
+            _sniper_lbl.update()
+            self.update_inv_label()
+            if self.lbl_inv:
+                self.lbl_inv.update()
+
         def _make_multi_handler(mx):
             def handler(_e):
                 self.fixed_multi = mx
@@ -2427,6 +2447,13 @@ class LinupApp:
             on_click=_toggle_prog,
         )
         _prog_ref[0] = _prog_btn
+
+        _sniper_btn = ft.ElevatedButton(
+            content=_sniper_lbl, height=30, expand=2,
+            style=ft.ButtonStyle(bgcolor=_SNIPER_OFF_COLOR, color=ft.Colors.WHITE),
+            on_click=_toggle_sniper,
+        )
+        _sniper_ref[0] = _sniper_btn
 
         _multi_btn_list = []
         for _mx in (1, 2, 3, 4, 5):
@@ -2445,7 +2472,7 @@ class LinupApp:
 
         prog_bar = ft.Container(
             bgcolor='#161616', padding=ft.padding.symmetric(horizontal=4, vertical=3),
-            content=ft.Row(controls=[_prog_btn] + _multi_btn_list, spacing=3),
+            content=ft.Row(controls=[_prog_btn, _sniper_btn] + _multi_btn_list, spacing=3),
         )
         # ──────────────────────────────────────────────────────────────────
 
@@ -2964,6 +2991,29 @@ class LinupApp:
                 )
             btn.update()
 
+    def _compute_safety_levels(self):
+        """Compute safety level for each number (count of groups that contain it).
+        Returns dict {num: count} where count is 0-5."""
+        levels = {}
+        straight_groups = [g for g in self.grupos_activos
+                          if g in self.GRUPOS_STRAIGHT or g in GRUPOS_LIVE_INSIDE]
+        for num in range(0, 37):
+            count = sum(1 for g in straight_groups if num in GRUPOS_MAESTROS[g])
+            levels[num] = count
+        return levels
+
+    def _compute_intersection(self):
+        """Compute intersection of all active groups (sniper mode).
+        Returns set of numbers that hit ALL active groups."""
+        straight_groups = [g for g in self.grupos_activos
+                          if g in self.GRUPOS_STRAIGHT or g in GRUPOS_LIVE_INSIDE]
+        if not straight_groups:
+            return set()
+        intersection = GRUPOS_MAESTROS[straight_groups[0]].copy()
+        for g in straight_groups[1:]:
+            intersection &= GRUPOS_MAESTROS[g]
+        return intersection
+
     def seleccionar_mixer(self, e):
         SECTORS = {'Z0', 'ZG', 'ZP', 'H'}
         g = e.control.data['name']
@@ -2981,7 +3031,11 @@ class LinupApp:
                                    if self._to_display_name(x) != g]
         else:
             all_sectors = all(x in SECTORS for x in self.grupos_activos) and g in SECTORS
-            limit = 3 if all_sectors else 2
+            # In sniper mode: unlimited selections; otherwise: cap at 3 sectors or 2 others
+            if self.sniper_mode:
+                limit = 999  # effectively unlimited
+            else:
+                limit = 3 if all_sectors else 2
             if len(self.grupos_activos) < limit:
                 self.grupos_activos.append(actual_g)
         self._refresh_mixer_colors()
@@ -2990,17 +3044,30 @@ class LinupApp:
 
     def _show_roulette_chip_popup(self, on_ready_cb):
         """Show vertical roulette chip placement popup for all active straight groups.
-        Calls on_ready_cb() when the user dismisses with READY."""
+        Calls on_ready_cb() when the user dismisses with READY.
+        If sniper_mode: show only intersection of all groups
+        If not sniper_mode: show safety levels (1-5 based on group count per number)"""
         multi        = self._current_multi(is_out=False)
         chip_per_num = self.val_fin * multi
-        total_cost, _ = self._compute_bet()   # exact amount that will hit the bank
 
         # Merge all nums from active straight groups (including live inside groups)
         straight_groups = [g for g in self.grupos_activos
                            if g in self.GRUPOS_STRAIGHT or g in GRUPOS_LIVE_INSIDE]
-        all_nums: set = set()
-        for g in straight_groups:
-            all_nums |= GRUPOS_MAESTROS[g]
+        
+        # Sniper mode: only show intersection
+        if self.sniper_mode:
+            all_nums = self._compute_intersection()
+            safety_levels = {n: 1 for n in all_nums}  # all have max safety
+            min_safety_filter = 1
+        else:
+            # Show all possible numbers with safety levels
+            all_nums: set = set()
+            for g in straight_groups:
+                all_nums |= GRUPOS_MAESTROS[g]
+            safety_levels = self._compute_safety_levels()
+            min_safety_filter = self.sniper_safety_level
+        
+        total_cost, _ = self._compute_bet()   # exact amount that will hit the bank
 
         # Color: use first group's color, or blended label if two
         def grp_color(g):
@@ -3034,11 +3101,37 @@ class LinupApp:
         CN   = 50   # number cell size (double, -10%)
         GAP  = 2
 
+        # Safety level colors: 1=red, 2=orange, 3=yellow, 4=green, 5=blue
+        SAFETY_COLORS = {
+            1: '#e74c3c',    # red
+            2: '#e67e22',    # orange
+            3: '#f39c12',    # yellow
+            4: '#27ae60',    # green
+            5: '#3498db',    # blue
+        }
+        
         def num_bg(num):
-            return '#27ae60' if num == 0 else ('#c0392b' if num in ROJOS else '#2c3e50')
+            if num == 0:
+                return '#27ae60'
+            elif self.sniper_mode:
+                # In sniper mode, show standard colors
+                return '#c0392b' if num in ROJOS else '#2c3e50'
+            else:
+                # Show safety level color
+                safety = safety_levels.get(num, 0)
+                if safety >= min_safety_filter:
+                    return SAFETY_COLORS.get(safety, '#2c3e50')
+                else:
+                    return '#1a1a1a'  # dark, not selected
 
         def make_cell(num):
-            lit = num in all_nums
+            # Cell is lit if in intersection (sniper mode) or meets safety filter
+            if self.sniper_mode:
+                lit = num in all_nums
+            else:
+                safety = safety_levels.get(num, 0)
+                lit = safety >= min_safety_filter
+            
             return ft.Container(
                 width=CN, height=CN,
                 bgcolor=num_bg(num),
@@ -3057,11 +3150,12 @@ class LinupApp:
 
         ROW_W = CN * 3 + GAP * 2   # exact pixel width of a number row
 
+        zero_lit = (0 in all_nums) if self.sniper_mode else True
         zero_row = ft.Container(
             width=ROW_W, height=CELL * 2,
             bgcolor='#27ae60',
-            border=ft.Border.all(3 if 0 in all_nums else 0.5,
-                                 '#f1c40f' if 0 in all_nums else '#444'),
+            border=ft.Border.all(3 if zero_lit else 0.5,
+                                 '#f1c40f' if zero_lit else '#444'),
             border_radius=6,
             alignment=ft.Alignment(0, 0),
             content=ft.Text("0", size=14, color=ft.Colors.WHITE,
@@ -3166,6 +3260,46 @@ class LinupApp:
                         text_align=ft.TextAlign.CENTER),
                 mx_row,
             ]
+        
+        # Add safety level selector when NOT in sniper mode
+        if not self.sniper_mode:
+            _safety_refs: dict = {}
+            
+            def _make_safety(level):
+                def handler(_ev):
+                    self.sniper_safety_level = level
+                    # Recompute display
+                    for k, b in _safety_refs.items():
+                        b.style = ft.ButtonStyle(
+                            bgcolor=SAFETY_COLORS.get(k, '#3a3a3a') if k == level else '#2a2a2a',
+                            color=ft.Colors.WHITE,
+                        )
+                        b.update()
+                    # Refresh grid with new filter
+                    dlg.update()
+                return handler
+            
+            safety_row = ft.Row(spacing=3, tight=True)
+            for _lvl in range(1, 6):
+                _sb = ft.ElevatedButton(
+                    content=ft.Text(f"{_lvl}", size=11,
+                                    weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                    expand=True, height=34,
+                    style=ft.ButtonStyle(
+                        bgcolor=SAFETY_COLORS.get(_lvl, '#3a3a3a') if _lvl == self.sniper_safety_level else '#2a2a2a',
+                        color=ft.Colors.WHITE,
+                    ),
+                    on_click=_make_safety(_lvl),
+                )
+                _safety_refs[_lvl] = _sb
+                safety_row.controls.append(_sb)
+            
+            popup_extra.extend([
+                ft.Container(height=6),
+                ft.Text("SAFETY LEVEL", color='#aaaaaa', size=10,
+                        text_align=ft.TextAlign.CENTER),
+                safety_row,
+            ])
 
         dlg.content = ft.Column(
             tight=True,
