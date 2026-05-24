@@ -1181,6 +1181,9 @@ class LinupApp:
                                 mur=dict(mesa_usd_rate), uc=total_usd_cap):
                     self.show_actual_graph_view(iid, n, c, it, mur, uc)
 
+                def _edit_sessions(_, n=inv_name, c=float(inv_capital), iid=investment_id):
+                    self.show_edit_sessions(iid, n, c)
+
                 table_rows.append(ft.Container(height=6))
                 table_rows.append(
                     ft.Row(
@@ -1197,6 +1200,13 @@ class LinupApp:
                                 on_click=_open_graph,
                                 expand=True, height=45,
                                 style=ft.ButtonStyle(bgcolor='#6c3483',
+                                                     color=ft.Colors.WHITE),
+                            ),
+                            ft.ElevatedButton(
+                                "EDIT SESSIONS",
+                                on_click=_edit_sessions,
+                                expand=True, height=45,
+                                style=ft.ButtonStyle(bgcolor='#d35400',
                                                      color=ft.Colors.WHITE),
                             ),
                         ],
@@ -1433,6 +1443,212 @@ class LinupApp:
             )
         )
         generate()   # auto-generate on open
+
+    # ──────────────────────────────────────────────────────────────────
+    # EDIT ACTUAL SESSIONS
+    # ──────────────────────────────────────────────────────────────────
+    def show_edit_sessions(self, investment_id: int, inv_name: str, inv_capital: float):
+        """Display and edit all compound sessions for an investment."""
+        sessions = []
+        conn = self._get_conn()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id, session_num, date, mesa, bank_start, bank_end, profit, profit_pct "
+                    "FROM compound_sessions WHERE investment_id=? ORDER BY id",
+                    (investment_id,)
+                )
+                sessions = cursor.fetchall()
+            except Exception:
+                pass
+            finally:
+                conn.close()
+
+        # Store session data for editing: list of (id, session_num, date_field, mesa, bank_start_field, bank_end_field, profit_field)
+        session_rows_ui = []
+        session_fields = []  # (session_id, date_field, bank_start_field, bank_end_field, profit_field)
+
+        for sid, snum, date_str, mesa, bs, be, prof, prof_pct in sessions:
+            date_field = ft.TextField(
+                value=date_str,
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
+                width=100,
+                tooltip="Format: yy.mm.dd or dd/mm hh:mm",
+            )
+            mesa_label = ft.Text(mesa, color=ft.Colors.WHITE, width=80)
+            bs_field = ft.TextField(
+                value=str(round(bs, 2)),
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
+                keyboard_type=ft.KeyboardType.NUMBER, width=80,
+            )
+            be_field = ft.TextField(
+                value=str(round(be, 2)),
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
+                keyboard_type=ft.KeyboardType.NUMBER, width=80,
+            )
+            profit_field = ft.TextField(
+                value=str(round(prof, 2)),
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
+                keyboard_type=ft.KeyboardType.NUMBER, width=80,
+                read_only=True,
+            )
+            
+            session_fields.append((sid, date_field, bs_field, be_field, profit_field))
+            
+            # Delete button
+            def make_delete_handler(session_id, row_index):
+                def on_delete(ev):
+                    dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
+                    def confirm(ev2):
+                        conn2 = self._get_conn()
+                        if conn2:
+                            try:
+                                conn2.execute("DELETE FROM compound_sessions WHERE id=?", (session_id,))
+                                conn2.commit()
+                            except Exception:
+                                pass
+                            finally:
+                                conn2.close()
+                        dlg.open = False
+                        dlg.update()
+                        self.show_edit_sessions(investment_id, inv_name, inv_capital)
+                    
+                    def cancel(ev2):
+                        dlg.open = False
+                        dlg.update()
+                    
+                    dlg.title = ft.Text("DELETE SESSION", color='#ff4444',
+                                       size=14, weight=ft.FontWeight.BOLD)
+                    dlg.content = ft.Text(
+                        f"Delete session #{snum} ({date_str})?\nThis cannot be undone.",
+                        color=ft.Colors.WHITE, size=12,
+                    )
+                    dlg.actions = [
+                        ft.ElevatedButton(
+                            "CANCEL", on_click=cancel, expand=1,
+                            style=ft.ButtonStyle(bgcolor='#555555', color=ft.Colors.WHITE),
+                        ),
+                        ft.ElevatedButton(
+                            "DELETE", on_click=confirm, expand=1,
+                            style=ft.ButtonStyle(bgcolor='#ff4444', color=ft.Colors.WHITE),
+                        ),
+                    ]
+                    dlg.actions_alignment = ft.MainAxisAlignment.CENTER
+                    self.page.show_dialog(dlg)
+                return on_delete
+
+            delete_btn = ft.ElevatedButton(
+                "✕", on_click=make_delete_handler(sid, len(session_rows_ui)),
+                height=40, width=40,
+                style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE),
+            )
+            
+            row = ft.Row(controls=[
+                ft.Text(str(snum), color=ft.Colors.WHITE, width=40),
+                date_field,
+                mesa_label,
+                bs_field,
+                be_field,
+                profit_field,
+                delete_btn,
+            ], spacing=3, tight=True)
+            session_rows_ui.append(row)
+
+        def on_save_all(ev):
+            """Save all edits and recalculate profits."""
+            conn = self._get_conn()
+            if not conn:
+                return
+            try:
+                for sid, date_field, bs_field, be_field, profit_field in session_fields:
+                    date_str = str(date_field.value).strip()
+                    try:
+                        bank_start = float(bs_field.value or 0)
+                    except ValueError:
+                        bank_start = 0.0
+                    try:
+                        bank_end = float(be_field.value or 0)
+                    except ValueError:
+                        bank_end = 0.0
+                    
+                    profit = round(bank_end - bank_start, 2)
+                    profit_pct = round((profit / bank_start * 100) if bank_start != 0 else 0, 2)
+                    
+                    conn.execute(
+                        "UPDATE compound_sessions SET date=?, bank_start=?, bank_end=?, profit=?, profit_pct=? WHERE id=?",
+                        (date_str, bank_start, bank_end, profit, profit_pct, sid)
+                    )
+                conn.commit()
+                # Show success dialog
+                dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
+                def close_dlg(ev2):
+                    dlg.open = False
+                    dlg.update()
+                    self.show_edit_sessions(investment_id, inv_name, inv_capital)
+                dlg.title = ft.Text("SESSIONS SAVED", color='#2ecc71', size=14, weight=ft.FontWeight.BOLD)
+                dlg.content = ft.Text("All changes saved successfully.", color=ft.Colors.WHITE)
+                dlg.actions = [ft.ElevatedButton("OK", on_click=close_dlg, style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE))]
+                dlg.actions_alignment = ft.MainAxisAlignment.CENTER
+                self.page.show_dialog(dlg)
+            except Exception as ex:
+                dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
+                def close_dlg(ev2):
+                    dlg.open = False
+                    dlg.update()
+                dlg.title = ft.Text("ERROR", color='#ff4444', size=14, weight=ft.FontWeight.BOLD)
+                dlg.content = ft.Text(f"Save failed: {str(ex)}", color=ft.Colors.WHITE, size=11)
+                dlg.actions = [ft.ElevatedButton("OK", on_click=close_dlg, style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE))]
+                dlg.actions_alignment = ft.MainAxisAlignment.CENTER
+                self.page.show_dialog(dlg)
+            finally:
+                conn.close()
+
+        def go_back(ev):
+            self.show_investment_dashboard(investment_id)
+
+        # Header row
+        header = ft.Row(controls=[
+            ft.Text("#", color='#7f8c8d', width=40, weight=ft.FontWeight.BOLD),
+            ft.Text("DATE", color='#7f8c8d', width=100, weight=ft.FontWeight.BOLD),
+            ft.Text("TABLE", color='#7f8c8d', width=80, weight=ft.FontWeight.BOLD),
+            ft.Text("START $", color='#7f8c8d', width=80, weight=ft.FontWeight.BOLD),
+            ft.Text("END $", color='#7f8c8d', width=80, weight=ft.FontWeight.BOLD),
+            ft.Text("PROFIT", color='#7f8c8d', width=80, weight=ft.FontWeight.BOLD),
+            ft.Text("", color='#7f8c8d', width=40, weight=ft.FontWeight.BOLD),
+        ], spacing=3, tight=True)
+
+        self._set_view(
+            ft.Container(
+                bgcolor='#1a1a1a', expand=True, padding=20,
+                content=ft.ListView(expand=True, controls=[
+                    ft.ElevatedButton(
+                        "←  BACK", on_click=go_back,
+                        style=ft.ButtonStyle(bgcolor='#34495e', color=ft.Colors.WHITE),
+                    ),
+                    ft.Container(height=12),
+                    ft.Text(
+                        f"{inv_name}  —  EDIT SESSIONS",
+                        color='#3498db', size=16, weight=ft.FontWeight.BOLD,
+                    ),
+                    ft.Text(
+                        f"Total sessions: {len(sessions)}  |  Base capital: ${inv_capital:.2f}",
+                        color='#7f8c8d', size=12,
+                    ),
+                    ft.Container(height=10),
+                    ft.Divider(color='#333333', height=1),
+                    header,
+                    ft.Divider(color='#333333', height=1),
+                ] + session_rows_ui + [
+                    ft.Container(height=10),
+                    ft.ElevatedButton(
+                        "SAVE ALL CHANGES", on_click=on_save_all,
+                        height=50, expand=True,
+                        style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE),
+                    ),
+                ]),
+            )
+        )
 
     # ──────────────────────────────────────────────────────────────────
     # ACTUAL GROWTH GRAPH
@@ -2590,11 +2806,11 @@ class LinupApp:
             # Color map for filter buttons
             filter_colors = {
                 'R': '#cc0000',      # Red
-                'B': '#888888',      # Black - gray when not pressed
-                '1-18': '#888888',   # Gray
-                'Even': '#888888',   # Gray
-                'Odd': '#888888',    # Gray
-                '19-36': '#888888',  # Gray
+                'B': '#aaaaaa',      # Black - lighter gray when not pressed
+                '1-18': '#aaaaaa',   # Lighter gray
+                'Even': '#aaaaaa',   # Lighter gray
+                'Odd': '#aaaaaa',    # Lighter gray
+                '19-36': '#aaaaaa',  # Lighter gray
             }
             # Roulette table layout: 1-18 | Even | Red | Black | Odd | 19-36
             filter_order = ['1-18', 'Even', 'R', 'B', 'Odd', '19-36']
@@ -2842,6 +3058,34 @@ class LinupApp:
         return all(g not in self.GRUPOS_STRAIGHT and g not in GRUPOS_LIVE_INSIDE
                    for g in self.grupos_activos)
 
+    def _is_simple_outside_bet(self):
+        """Check if current selection is a simple outside bet (single type, 1-2 groups).
+        Simple outside bets: 1-2 dozens, 1-2 columns, 1-2 filters.
+        Returns True for: 1a, 2a, 34+35, R, Even+Odd, etc.
+        Returns False for: mixed types like 1a+34, or 3+ same type.
+        """
+        if not self.grupos_activos:
+            return False
+        
+        n = len(self.grupos_activos)
+        columns = {'34', '35', '36'}
+        dozens = {'1a', '2a', '3a'}
+        filters = {'R', 'B', 'Even', 'Odd', '1-18', '19-36'}
+        outside_types = columns | dozens | filters
+        
+        # Categorize active groups (use display names to handle live variants)
+        active_display = [self._to_display_name(g) for g in self.grupos_activos]
+        col_groups = [g for g in active_display if g in columns]
+        doc_groups = [g for g in active_display if g in dozens]
+        flt_groups = [g for g in active_display if g in filters]
+        other_groups = [g for g in active_display if g not in outside_types]
+        
+        # Count how many types are represented
+        types_used = sum([1 for x in [col_groups, doc_groups, flt_groups, other_groups] if x])
+        
+        # Simple outside: only ONE type, and max 2 groups of that type
+        return types_used == 1 and n <= 2
+
     def _group_cost(self, g):
         if g in self.GRUPOS_STRAIGHT or g in GRUPOS_LIVE_INSIDE:
             return self.val_fin * len(GRUPOS_MAESTROS[g])
@@ -2874,11 +3118,12 @@ class LinupApp:
         filters = {'R', 'B', 'Even', 'Odd', '1-18', '19-36'}
         outside_types = columns | dozens | filters
         
-        # Categorize active groups
-        col_groups = [g for g in self.grupos_activos if g in columns]
-        doc_groups = [g for g in self.grupos_activos if g in dozens]
-        flt_groups = [g for g in self.grupos_activos if g in filters]
-        other_groups = [g for g in self.grupos_activos if g not in outside_types]
+        # Categorize active groups (use display names to handle live variants)
+        active_display = [self._to_display_name(g) for g in self.grupos_activos]
+        col_groups = [g for g in active_display if g in columns]
+        doc_groups = [g for g in active_display if g in dozens]
+        flt_groups = [g for g in active_display if g in filters]
+        other_groups = [g for g in active_display if g not in outside_types]
         
         # Count how many types are represented
         types_used = sum([1 for x in [col_groups, doc_groups, flt_groups, other_groups] if x])
@@ -2886,10 +3131,11 @@ class LinupApp:
         total = 0.0
         win_payout = 0.0
         
-        # If only ONE type is used, it's an outside bet
-        if types_used <= 1:
-            is_out = True
-            multi_out = self._current_multi(is_out)
+        # Simple outside bet: single type with max 2 groups
+        is_simple_outside = types_used == 1 and n <= 2
+        
+        if is_simple_outside:
+            multi_out = self._current_multi(is_out=True)
             n_out = len(self.grupos_activos)
             if n_out == 1:
                 total = self.val_fout * multi_out
@@ -2898,48 +3144,62 @@ class LinupApp:
                 total = self.val_fout * multi_out * n_out
                 win_payout = self.val_fout * multi_out * 3
         else:
-            # Mixed types = inside bet with intersection
+            # Mixed types or 3+ groups = inside bet
             multi_in = self._current_multi(is_out=False)
             
-            # Calculate all numbers covered by each type
-            type_nums = []
-            
-            if col_groups:
-                col_nums = set()
-                for g in col_groups:
-                    col_nums |= GRUPOS_MAESTROS[g]
-                type_nums.append(col_nums)
-            
-            if doc_groups:
-                doc_nums = set()
-                for g in doc_groups:
-                    doc_nums |= GRUPOS_MAESTROS[g]
-                type_nums.append(doc_nums)
-            
-            if flt_groups:
-                flt_nums = set()
-                for g in flt_groups:
-                    flt_nums |= GRUPOS_MAESTROS[g]
-                type_nums.append(flt_nums)
-            
-            if other_groups:
-                oth_nums = set()
-                for g in other_groups:
-                    if g in GRUPOS_MAESTROS:
-                        oth_nums |= GRUPOS_MAESTROS[g]
-                type_nums.append(oth_nums)
-            
-            # Intersection of all types
-            if type_nums:
-                intersection = type_nums[0]
-                for nums_set in type_nums[1:]:
-                    intersection &= nums_set
+            if self.sniper_mode:
+                # Sniper ON: use intersection count
+                # Calculate all numbers covered by each type
+                type_nums = []
+                
+                if col_groups:
+                    col_nums = set()
+                    for g in self.grupos_activos:
+                        if self._to_display_name(g) in columns:
+                            col_nums |= GRUPOS_MAESTROS[g]
+                    type_nums.append(col_nums)
+                
+                if doc_groups:
+                    doc_nums = set()
+                    for g in self.grupos_activos:
+                        if self._to_display_name(g) in dozens:
+                            doc_nums |= GRUPOS_MAESTROS[g]
+                    type_nums.append(doc_nums)
+                
+                if flt_groups:
+                    flt_nums = set()
+                    for g in self.grupos_activos:
+                        if self._to_display_name(g) in filters:
+                            flt_nums |= GRUPOS_MAESTROS[g]
+                    type_nums.append(flt_nums)
+                
+                if other_groups:
+                    oth_nums = set()
+                    for g in self.grupos_activos:
+                        if g in GRUPOS_MAESTROS:
+                            oth_nums |= GRUPOS_MAESTROS[g]
+                    type_nums.append(oth_nums)
+                
+                # Intersection of all types
+                if type_nums:
+                    intersection = type_nums[0]
+                    for nums_set in type_nums[1:]:
+                        intersection &= nums_set
+                else:
+                    intersection = set()
+                
+                num_chips = len(intersection) if intersection else 1
+                total = self.val_fin * num_chips * multi_in
+                win_payout = self.val_fin * 36 * multi_in
             else:
-                intersection = set()
-            
-            num_chips = len(intersection) if intersection else 1
-            total = self.val_fin * num_chips * multi_in
-            win_payout = self.val_fin * 36 * multi_in
+                # Sniper OFF: use sum of safety levels (total chips wagered)
+                safety_levels = self._compute_safety_levels()
+                num_chips = sum(safety_levels.values()) if safety_levels else 1
+                # For payout: we hit one number at some multiplier
+                # Payout = 36 × val_fin × multi (worst case, highest multiplier)
+                # But total cost = num_chips × val_fin × multi
+                total = self.val_fin * num_chips * multi_in
+                win_payout = self.val_fin * 36 * multi_in
         
         return total, win_payout
 
@@ -2954,15 +3214,15 @@ class LinupApp:
             num = int(e.control.data)
             if self.activa:
                 n                     = len(self.grupos_activos)
-                is_out                = self._is_outside()
-                self.last_bet_outside = is_out
+                is_simple_outside     = self._is_simple_outside_bet()
+                self.last_bet_outside = is_simple_outside
                 self.last_prog_state  = self.prog_on   # save for undo
                 total_cost, win_py    = self._compute_bet()
                 self.banca_actual    -= total_cost
 
                 # Sniper mode: check intersection only; regular mode: check if in any group
                 is_win = False
-                if self.sniper_mode and not is_out:
+                if self.sniper_mode and not is_simple_outside:
                     intersection = self._compute_intersection()
                     is_win = num in intersection
                 else:
@@ -2973,7 +3233,7 @@ class LinupApp:
                     self.last_bank_delta = win_py - total_cost
                     # Only reset progression counters when progression is active
                     if self.prog_on:
-                        if is_out:
+                        if is_simple_outside:
                             self.idx_fibo_out         = 0
                             self.nivel_martingala_out = 0
                         else:
@@ -2984,14 +3244,14 @@ class LinupApp:
                     # Only advance progression counters when progression is active
                     if self.prog_on:
                         if n == 1:
-                            if is_out:
+                            if is_simple_outside:
                                 if self.idx_fibo_out < len(PROG_FIBO) - 1:
                                     self.idx_fibo_out += 1
                             else:
                                 if self.idx_fibo_in < len(PROG_FIBO) - 1:
                                     self.idx_fibo_in += 1
                         else:
-                            if is_out:
+                            if is_simple_outside:
                                 self.nivel_martingala_out += 1
                             else:
                                 self.nivel_martingala_in += 1
@@ -3030,15 +3290,28 @@ class LinupApp:
     def _refresh_mixer_colors(self):
         has_sel = bool(self.grupos_activos)
         active_display = {self._to_display_name(g) for g in self.grupos_activos}
+        # Identify outside bet types
+        outside_groups = {'34', '35', '36', '1a', '2a', '3a', 'R', 'B', 'Even', 'Odd', '1-18', '19-36'}
+        
         for g, btn in self.mixer_btns.items():
             base_color = btn.data['color']
+            is_outside = g in outside_groups
+            
             if g in active_display:
-                # Selected: yellow text (#ffdd00) + bright background
-                btn.style = ft.ButtonStyle(
-                    bgcolor=base_color, color='#ffdd00',
-                    animation_duration=400,
-                    overlay_color={ft.ControlState.PRESSED: ft.Colors.with_opacity(0.4, ft.Colors.WHITE)},
-                )
+                if is_outside:
+                    # Outside bets: yellow text (like inside bets) to indicate selection
+                    btn.style = ft.ButtonStyle(
+                        bgcolor=base_color, color='#ffdd00',
+                        animation_duration=400,
+                        overlay_color={ft.ControlState.PRESSED: ft.Colors.with_opacity(0.4, ft.Colors.WHITE)},
+                    )
+                else:
+                    # Inside bets: yellow text + original background
+                    btn.style = ft.ButtonStyle(
+                        bgcolor=base_color, color='#ffdd00',
+                        animation_duration=400,
+                        overlay_color={ft.ControlState.PRESSED: ft.Colors.with_opacity(0.4, ft.Colors.WHITE)},
+                    )
             elif has_sel:
                 # Deselected (others selected): dimmed base color + white text for visibility
                 dimmed_color = ft.Colors.with_opacity(0.5, base_color)
@@ -3093,7 +3366,13 @@ class LinupApp:
                 return 'COLUMN'
             elif g.startswith(('1a', '2a', '3a')):
                 return 'DOZEN'
-            else:  # R, B, Even, Odd, 1-18, 19-36
+            elif g in {'R', 'B'}:
+                return 'COLOR'
+            elif g in {'Even', 'Odd'}:
+                return 'PARITY'
+            elif g in {'1-18', '19-36'}:
+                return 'RANGE'
+            else:
                 return 'FILTER'
         
         # Group by type
@@ -3143,32 +3422,118 @@ class LinupApp:
         self.update_inv_label()
         self.lbl_inv.update()
 
+    def _build_outside_bet_sections(self, highlight=True):
+        """Build real roulette table layout with bets positioned around the grid.
+        Returns dict with sections for layout organization.
+        left1 = dozens, left2 = filters (both on left side in two columns)
+        highlight: if True, selected fields get yellow; if False, all fields are gray (for inside bet popups)
+        """
+        result = {'left1': [], 'left2': [], 'right': [], 'bottom': []}
+        
+        # Extract base names
+        def get_base_name(g):
+            for sfx in ('_LR', '_LB', '_L', '_R', '_B', '_18', '_E', '_O', '_36', '_L18', '_LE', '_LO', '_L36'):
+                if g.endswith(sfx):
+                    return g[:-len(sfx)]
+            return g
+        
+        base_names = {get_base_name(g) for g in self.grupos_activos}
+        columns = {'34', '35', '36'}
+        dozens = {'1a', '2a', '3a'}
+        filters = {'R', 'B', 'Even', 'Odd', '1-18', '19-36'}
+        
+        col_base = base_names & columns
+        doc_base = base_names & dozens
+        flt_base = base_names & filters
+        
+        # Each dozen spans 4 rows of the grid (1-12, 13-24, 25-36)
+        # Height = 4 rows × (50px cell + 2px gap) - 2px for last gap = 206px
+        row_height = 50 + 2  # cell + gap
+        dozens_height = row_height * 4 - 2  # 4 rows for each dozen
+        
+        # LEFT SIDE COLUMN 1: Dozens (1a, 2a, 3a) - tall cells spanning 4 rows each
+        if doc_base or not highlight:  # Always show dozens section if we're showing outside fields
+            for doc in ['1a', '2a', '3a']:
+                is_selected = highlight and (doc in doc_base)
+                bg_color = '#ffdd00' if is_selected else '#333333'
+                text_color = '#000000' if is_selected else ft.Colors.WHITE
+                cell = ft.Container(
+                    bgcolor=bg_color,
+                    border_radius=2, padding=4,
+                    content=ft.Text(doc, color=text_color, size=10,
+                                  weight=ft.FontWeight.BOLD,
+                                  text_align=ft.TextAlign.CENTER),
+                    width=50, height=dozens_height,
+                    alignment=ft.Alignment(0, 0),
+                )
+                result['left1'].append(cell)
+        
+        # LEFT SIDE COLUMN 2: Filters (1-18, Even, R, B, Odd, 19-36)
+        if flt_base or not highlight:  # Always show filters section if we're showing outside fields
+            filter_order = ['1-18', 'Even', 'R', 'B', 'Odd', '19-36']
+            filter_labels = {'1-18': '1-18', 'Even': 'E', 'R': 'R', 
+                            'B': 'B', 'Odd': 'O', '19-36': '19-36'}
+            # Each filter cell = grid height / 6 ≈ 26px
+            filter_height = (dozens_height / 2)  # Roughly 2 filters per dozen row
+            for filt in filter_order:
+                is_selected = highlight and (filt in flt_base)
+                bg_color = '#ffdd00' if is_selected else '#333333'
+                text_color = '#000000' if is_selected else ft.Colors.WHITE
+                cell = ft.Container(
+                    bgcolor=bg_color,
+                    border_radius=2, padding=2,
+                    content=ft.Text(filter_labels[filt], color=text_color, size=8,
+                                  weight=ft.FontWeight.BOLD,
+                                  text_align=ft.TextAlign.CENTER),
+                    width=50, height=int(filter_height),
+                )
+                result['left2'].append(cell)
+        
+        # BOTTOM: Columns (34, 35, 36) aligned with grid columns
+        bottom_columns = []
+        if col_base or not highlight:  # Always show columns section if we're showing outside fields
+            for col in ['34', '35', '36']:
+                is_selected = highlight and (col in col_base)
+                bg_color = '#ffdd00' if is_selected else '#333333'
+                text_color = '#000000' if is_selected else ft.Colors.WHITE
+                cell = ft.Container(
+                    bgcolor=bg_color,
+                    border_radius=2, padding=4,
+                    content=ft.Text(col, color=text_color, size=8,
+                                  weight=ft.FontWeight.BOLD,
+                                  text_align=ft.TextAlign.CENTER),
+                    width=50, height=28,
+                )
+                bottom_columns.append(cell)
+            result['bottom'].append(('columns', bottom_columns))
+        
+        return result
+
     def _show_roulette_chip_popup(self, on_ready_cb):
-        """Show vertical roulette chip placement popup for all active straight groups.
-        Calls on_ready_cb() when the user dismisses with READY.
-        If sniper_mode: show only intersection of all groups
-        If not sniper_mode: show safety levels (1-5 based on group count per number)"""
-        multi        = self._current_multi(is_out=False)
+        """Show popup based on bet type:
+        - For simple outside bets: show full table with selected groups (1a, 2a, etc.) highlighted with yellow borders
+        - For inside bets: show full table with intersection numbers highlighted in yellow
+        """
+        # Check if this is a simple outside bet
+        is_simple_outside = self._is_simple_outside_bet()
+        
+        multi        = self._current_multi(is_out=is_simple_outside)
         chip_per_num = self.val_fin * multi
-
-        # Sniper mode: show intersection only (no fallback)
-        if self.sniper_mode:
-            intersection = self._compute_intersection()
-            all_nums = intersection  # Show only intersection, never fallback to union
-            safety_levels = {n: 1 for n in all_nums}  # all shown numbers have same "safety"
-            min_safety_filter = 1
-        else:
-            # Show all possible numbers from all active groups with multiplicity
-            all_nums: set = set()
-            for g in self.grupos_activos:
-                if g in GRUPOS_MAESTROS:
-                    all_nums |= GRUPOS_MAESTROS[g]
-            safety_levels = self._compute_safety_levels()
-            min_safety_filter = 0  # Show all numbers, no filtering
-            # Calculate max safety level for highlighting with yellow in sniper OFF mode
-            max_safety = max(safety_levels.values()) if safety_levels else 0
-
+        
         total_cost, _ = self._compute_bet()   # exact amount that will hit the bank
+        
+        # For outside bets, highlight selected groups; for inside bets, highlight intersection
+        if is_simple_outside:
+            return self._show_outside_bet_popup(on_ready_cb)
+        else:
+            return self._show_inside_bet_popup(on_ready_cb)
+    
+    def _show_outside_bet_popup(self, on_ready_cb):
+        """Show popup with full table: outside field buttons highlighted yellow, NO grid highlighting."""
+        total_cost, _ = self._compute_bet()
+        multi        = self._current_multi(is_out=True)
+        chip_per_num = self.val_fin * multi
+        
         def grp_color(g):
             if g in {'Z0', 'ZG', 'ZP', 'H'}:                   return C_SEC
             if g in {'W1', 'W2', 'W3'}:                         return C_WAV
@@ -3199,15 +3564,6 @@ class LinupApp:
         CELL = 25   # zero cell size
         CN   = 50   # number cell size (double, -10%)
         GAP  = 2
-
-        # Multiplicity colors for border: 1x=red, 2x=orange, 3x=cyan, 4x=blue; max level always yellow
-        SAFETY_COLORS = {
-            1: '#c0392b',    # deep red - lowest multiplicity
-            2: '#e67e22',    # orange
-            3: '#1abc9c',    # cyan/turquoise - distinctive
-            4: '#3498db',    # bright blue
-            5: '#3498db',    # bright blue (max is yellow, so this is fallback)
-        }
         
         def num_bg(num):
             """Original roulette colors: red for ROJOS, black for others, green for zero"""
@@ -3216,97 +3572,35 @@ class LinupApp:
             else:
                 return '#c0392b' if num in ROJOS else '#2c3e50'
         
-        def get_border_color(num, safety):
-            """Border color based on safety level or sniper mode"""
-            if self.sniper_mode:
-                # In sniper mode: yellow border for intersection, dim gray for non-intersection
-                return '#ffdd00' if (num in all_nums) else '#444'
-            else:
-                # Show safety level color as border; gray if doesn't meet filter
-                if safety >= min_safety_filter:
-                    return SAFETY_COLORS.get(safety, '#888')
-                else:
-                    return '#222'  # very dark for filtered-out numbers
-
         def make_cell(num):
-            # Cell is lit if in intersection (sniper mode) or always when sniper OFF
-            if self.sniper_mode:
-                lit = num in all_nums
-                border_color = '#ffdd00' if lit else '#444'
-            else:
-                # Sniper OFF: show all numbers with multiplicity label
-                lit = True  # always lit in sniper OFF
-                safety = safety_levels.get(num, 0)
-                # Use yellow for the highest multiplicity level, otherwise use SAFETY_COLORS
-                if safety == max_safety and max_safety > 0:
-                    border_color = '#ffdd00'
-                else:
-                    border_color = SAFETY_COLORS.get(safety, '#888')
-            
-            # Add multiplicity label when sniper OFF
-            multiplicity_text = None
-            if not self.sniper_mode:
-                safety = safety_levels.get(num, 0)
-                if safety > 0:
-                    multiplicity_text = f"{safety}x"
-            
-            content_controls = [ft.Text(str(num), size=14, color=ft.Colors.WHITE,
-                                      weight=ft.FontWeight.BOLD,
-                                      text_align=ft.TextAlign.CENTER)]
-            if multiplicity_text:
-                content_controls.append(ft.Text(multiplicity_text, size=10, color=ft.Colors.WHITE,
-                                              weight=ft.FontWeight.BOLD,
-                                              text_align=ft.TextAlign.CENTER))
-            
+            # For outside bets, NO highlighting on grid numbers - all gray borders
             return ft.Container(
                 width=CN, height=CN,
                 bgcolor=num_bg(num),
-                border=ft.Border.all(3 if lit else 0.5, border_color),
+                border=ft.Border.all(1, '#333'),
                 border_radius=6,
                 content=ft.Column(
                     alignment=ft.MainAxisAlignment.CENTER,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=0,
-                    controls=content_controls,
+                    controls=[ft.Text(str(num), size=14, color=ft.Colors.WHITE,
+                                     weight=ft.FontWeight.BOLD,
+                                     text_align=ft.TextAlign.CENTER)],
                 ),
             )
 
-
         ROW_W = CN * 3 + GAP * 2   # exact pixel width of a number row
 
-        # Zero row: green background, border color based on mode
-        if self.sniper_mode:
-            zero_lit = 0 in all_nums
-            zero_border_color = '#ffdd00' if zero_lit else '#444'
-            zero_content = ft.Text("0", size=14, color=ft.Colors.WHITE,
-                                  weight=ft.FontWeight.BOLD,
-                                  text_align=ft.TextAlign.CENTER)
-        else:
-            # Sniper OFF: always lit, show multiplicity
-            zero_lit = True
-            zero_safety = safety_levels.get(0, 0)
-            # Use yellow for the highest multiplicity level, otherwise use SAFETY_COLORS
-            if zero_safety == max_safety and max_safety > 0:
-                zero_border_color = '#ffdd00'
-            else:
-                zero_border_color = SAFETY_COLORS.get(zero_safety, '#888')
-            zero_content = ft.Column(
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=0,
-                controls=[ft.Text("0", size=14, color=ft.Colors.WHITE,
-                                 weight=ft.FontWeight.BOLD),
-                         ft.Text(f"{zero_safety}x", size=10, color=ft.Colors.WHITE,
-                                weight=ft.FontWeight.BOLD) if zero_safety > 0 else ft.Container(height=0)]
-            )
-        
+        # Zero row: green background, gray border (no highlighting for outside bets)
         zero_row = ft.Container(
             width=ROW_W, height=CELL * 2,
             bgcolor='#27ae60',
-            border=ft.Border.all(3 if zero_lit else 0.5, zero_border_color),
+            border=ft.Border.all(1, '#333'),
             border_radius=6,
             alignment=ft.Alignment(0, 0),
-            content=zero_content,
+            content=ft.Text("0", size=14, color=ft.Colors.WHITE,
+                          weight=ft.FontWeight.BOLD,
+                          text_align=ft.TextAlign.CENTER),
         )
 
         num_rows = []
@@ -3326,7 +3620,6 @@ class LinupApp:
                 tight=True,
             ),
         )
-
 
         dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
 
@@ -3353,8 +3646,10 @@ class LinupApp:
                 ),
             ],
         )
+        
+        # For outside bets: show only total (no breakdown)
         _total_lbl = ft.Text(
-            f"Total: ${total_cost:.2f}  ({len(all_nums)} × ${chip_per_num:.2f})",
+            f"Total: ${total_cost:.2f}",
             color='#ecf0f1', size=12, weight=ft.FontWeight.BOLD,
             text_align=ft.TextAlign.CENTER,
         )
@@ -3369,9 +3664,9 @@ class LinupApp:
                 def handler(_ev):
                     self.fixed_multi = mx
                     _c  = self.val_fin * mx
-                    _t  = len(all_nums) * _c
+                    _t  = len(self.grupos_activos) * _c  # num groups × chip_per_group
                     _chip_lbl.value  = f"${_c:.2f}/num"
-                    _total_lbl.value = f"Total: ${_t:.2f}  ({len(all_nums)} × ${_c:.2f})"
+                    _total_lbl.value = f"Total: ${_t:.2f}"
                     for k, b in _pmx_refs.items():
                         b.style = ft.ButtonStyle(
                             bgcolor='#f39c12' if k == mx else '#3a3a3a',
@@ -3407,13 +3702,460 @@ class LinupApp:
                 mx_row,
             ]
 
+        # Build outside betting table sections - with highlighting enabled for outside bets
+        outside_sections = self._build_outside_bet_sections(highlight=True)
+        
+        # Extract betting table components for layout
+        left1_bets = outside_sections.get('left1', [])     # Dozens
+        left2_bets = outside_sections.get('left2', [])     # Filters
+        right_bets = outside_sections.get('right', [])     # (empty)
+        bottom_sections = outside_sections.get('bottom', [])  # List of (type, controls) tuples
+        
+        # Build the table layout: left side (2 columns) / grid / bottom
+        if left1_bets or left2_bets or bottom_sections:
+            # Left side: TWO COLUMNS - Dozens (left1) and Filters (left2)
+            # Shift down 52px (zero row 50px + gap 2px) so cells start at row 1
+            left_panels = []
+            
+            if left1_bets:
+                left1_panel = ft.Container(
+                    width=50,
+                    padding=ft.padding.only(top=52),
+                    content=ft.Column(controls=left1_bets, spacing=2, tight=True,
+                                     horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                )
+                left_panels.append(left1_panel)
+            
+            if left2_bets:
+                left2_panel = ft.Container(
+                    width=50,
+                    padding=ft.padding.only(top=52),
+                    content=ft.Column(controls=left2_bets, spacing=2, tight=True,
+                                     horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                )
+                left_panels.append(left2_panel)
+            
+            # Combined left side (both columns in a row)
+            left_side = ft.Row(controls=left_panels, spacing=2, tight=True) if left_panels else None
+            
+            # Center: Roulette grid with left side
+            middle_row_controls = []
+            if left_side:
+                middle_row_controls.append(left_side)
+            middle_row_controls.append(grid)
+            
+            middle_row = ft.Row(
+                controls=middle_row_controls,
+                spacing=2, tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+            )
+            
+            # Bottom sections: columns (34, 35, 36)
+            bottom_panels = []
+            for section_type, section_controls in bottom_sections:
+                if section_type == 'columns':
+                    # Columns as compact row - no expand, just 3x50px
+                    panel = ft.Row(controls=section_controls, spacing=2, tight=True)
+                    bottom_panels.append(panel)
+            
+            # Combine middle and bottom
+            table_layout_controls = [middle_row]
+            if bottom_panels:
+                table_layout_controls.append(ft.Container(height=4))
+                for panel in bottom_panels:
+                    table_layout_controls.append(panel)
+            
+            main_content = ft.Column(controls=table_layout_controls, spacing=0, tight=True,
+                                    horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+        else:
+            # No outside bets, just show roulette grid centered
+            main_content = grid
+        
         dlg.content = ft.Column(
             tight=True,
             scroll=ft.ScrollMode.AUTO,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 ft.Container(height=4),
-                grid,
+                main_content,
+                ft.Container(height=8),
+                _total_lbl,
+            ] + popup_extra,
+        )
+        dlg.actions = [
+            ft.ElevatedButton(
+                content=ft.Text("CANCEL", size=13, weight=ft.FontWeight.BOLD),
+                on_click=on_cancel, expand=1,
+                style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE),
+            ),
+            ft.ElevatedButton(
+                content=ft.Text("READY", size=13, weight=ft.FontWeight.BOLD),
+                on_click=cerrar, expand=1,
+                style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE),
+            ),
+        ]
+        dlg.actions_alignment = ft.MainAxisAlignment.CENTER
+        self.page.show_dialog(dlg)
+    
+    def _show_inside_bet_popup(self, on_ready_cb):
+        """Show popup with roulette grid and outside betting table for inside bets."""
+        multi        = self._current_multi(is_out=False)
+        chip_per_num = self.val_fin * multi
+
+        # Sniper mode: smart intersection across group types, union within types.
+        # When sniper OFF on inside bets: show all numbers from all groups (fallback view)
+        intersection = self._compute_intersection()
+        
+        if self.sniper_mode:
+            # Sniper ON: show only intersection
+            all_nums = intersection
+            safety_levels = {n: 1 for n in all_nums}
+            total_chips = len(all_nums)  # Each number is in 1 "slot" (the intersection)
+        else:
+            # Sniper OFF: show all numbers from all groups with safety levels
+            all_nums: set = set()
+            for g in self.grupos_activos:
+                if g in GRUPOS_MAESTROS:
+                    all_nums |= GRUPOS_MAESTROS[g]
+            safety_levels = self._compute_safety_levels()
+            total_chips = sum(safety_levels.values())  # Sum of all safety levels
+            max_safety = max(safety_levels.values()) if safety_levels else 0
+        
+        # Calculate total cost based on total chips
+        total_cost = total_chips * chip_per_num
+
+        def grp_color(g):
+            if g in {'Z0', 'ZG', 'ZP', 'H'}:                   return C_SEC
+            if g in {'W1', 'W2', 'W3'}:                         return C_WAV
+            if self._to_display_name(g) in ('1a', '2a', '3a'):  return C_DOC
+            if self._to_display_name(g) in ('34', '35', '36'):  return C_COL
+            return C_SET
+
+        def grp_label(g):
+            """Human-readable label for chip popup header."""
+            for sfx, tag in [('_LR','·R'),('_LB','·B'),('_L18','·1-18'),
+                              ('_LE','·Even'),('_LO','·Odd'),('_L36','·19-36'),
+                              ('_L',''), ('_R','·R'),('_B','·B'),('_18','·1-18'),
+                              ('_E','·Even'),('_O','·Odd'),('_36','·19-36')]:
+                if g.endswith(sfx):
+                    return self._to_display_name(g) + tag
+            return g
+
+        title_chips = [
+            ft.Container(
+                bgcolor=grp_color(g), border_radius=5,
+                padding=ft.padding.symmetric(horizontal=8, vertical=2),
+                content=ft.Text(grp_label(g), color=ft.Colors.WHITE, size=14,
+                                weight=ft.FontWeight.BOLD),
+            )
+            for g in self.grupos_activos
+        ]
+
+        CELL = 25   # zero cell size
+        CN   = 50   # number cell size (double, -10%)
+        GAP  = 2
+        
+        # When sniper OFF: use safety_levels to show border colors and multiplier text
+        # When sniper ON: yellow border only for intersection
+        max_safety = max(safety_levels.values()) if safety_levels else 1
+        
+        # Color map for safety level borders - higher safety = brighter/more important color
+        SAFETY_COLORS = {
+            1: '#666666',  # Gray for numbers in only 1 group (low priority)
+            2: '#ff00ff',  # Magenta for 2 groups
+            3: '#ff6600',  # Orange for 3 groups
+            4: '#ffdd00',  # Yellow for 4 groups (high multiplicity)
+            5: '#ffff00',  # Bright yellow for 5 groups (max)
+        }
+        
+        def should_show_number(num):
+            """Check if number is in the active selection."""
+            if self.sniper_mode:
+                return num in all_nums
+            else:
+                return num in safety_levels and safety_levels[num] > 0
+        
+        def get_border_color(num):
+            """Return border color based on safety level."""
+            if self.sniper_mode:
+                return '#ffdd00'  # Yellow for sniper ON intersection
+            else:
+                # Sniper OFF: color by safety level
+                sl = safety_levels.get(num, 0)
+                return SAFETY_COLORS.get(sl, '#ffdd00')
+        
+        def get_border_width(num):
+            """Return border width based on visibility."""
+            if self.sniper_mode:
+                return 3
+            else:
+                # Sniper OFF: thicker border for higher safety
+                return 2 if safety_levels.get(num, 0) > 1 else 1
+        
+        def num_bg(num):
+            """Original roulette colors: red for ROJOS, black for others, green for zero"""
+            if num == 0:
+                return '#27ae60'
+            else:
+                return '#c0392b' if num in ROJOS else '#2c3e50'
+        
+        def make_cell(num):
+            # Always show the number with its roulette color
+            is_selected = should_show_number(num)
+            
+            # Build cell content: number on first line, safety multiplier on second
+            cell_controls = [
+                ft.Text(str(num), size=14, color=ft.Colors.WHITE,
+                       weight=ft.FontWeight.BOLD,
+                       text_align=ft.TextAlign.CENTER)
+            ]
+            
+            # Add safety level text only if in selection and has safety > 1
+            if is_selected and not self.sniper_mode and safety_levels.get(num, 0) > 1:
+                safety = safety_levels[num]
+                cell_controls.append(
+                    ft.Text(f'{safety}x', size=9, color='#ffdd00',
+                           weight=ft.FontWeight.BOLD,
+                           text_align=ft.TextAlign.CENTER)
+                )
+            
+            # If selected, add border; if not selected, no border
+            if is_selected:
+                border_color = get_border_color(num)
+                border_width = get_border_width(num)
+                border = ft.Border.all(border_width, border_color)
+            else:
+                border = None
+            
+            return ft.Container(
+                width=CN, height=CN,
+                bgcolor=num_bg(num),
+                border=border,
+                border_radius=6,
+                content=ft.Column(
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=0,
+                    controls=cell_controls,
+                ),
+            )
+
+        ROW_W = CN * 3 + GAP * 2   # exact pixel width of a number row
+
+        # Zero row: always show with color, add border only if selected
+        is_zero_selected = should_show_number(0)
+        
+        # Zero cell content: number and optional safety multiplier
+        zero_controls = [ft.Text("0", size=14, color=ft.Colors.WHITE,
+                                 weight=ft.FontWeight.BOLD,
+                                 text_align=ft.TextAlign.CENTER)]
+        if is_zero_selected and not self.sniper_mode and safety_levels.get(0, 0) > 1:
+            safety = safety_levels[0]
+            zero_controls.append(
+                ft.Text(f'{safety}x', size=9, color='#ffdd00',
+                       weight=ft.FontWeight.BOLD,
+                       text_align=ft.TextAlign.CENTER)
+            )
+        
+        # Add border only if selected
+        if is_zero_selected:
+            zero_border_color = get_border_color(0)
+            zero_border_width = get_border_width(0)
+            zero_border = ft.Border.all(zero_border_width, zero_border_color)
+        else:
+            zero_border = None
+        
+        zero_row = ft.Container(
+            width=ROW_W, height=CELL * 2,
+            bgcolor='#27ae60',
+            border=zero_border,
+            border_radius=6,
+            alignment=ft.Alignment(0, 0),
+            content=ft.Column(
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=0,
+                controls=zero_controls,
+            ),
+        )
+
+        num_rows = []
+        for i in range(12):
+            base = i * 3
+            a, b, c = base + 1, base + 2, base + 3
+            num_rows.append(
+                ft.Row([make_cell(a), make_cell(b), make_cell(c)],
+                       spacing=GAP, tight=True)
+            )
+
+        grid = ft.Container(
+            width=ROW_W,
+            content=ft.Column(
+                controls=[zero_row] + num_rows,
+                spacing=GAP,
+                tight=True,
+            ),
+        )
+
+        dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
+
+        def on_cancel(_ev):
+            dlg.open = False
+            dlg.update()
+
+        def cerrar(_ev):
+            dlg.open = False
+            dlg.update()
+            on_ready_cb()
+
+        dlg.title = ft.Column(
+            tight=True,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Row(
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    controls=title_chips + [ft.Container(width=6)] + [
+                        ft.Text(f"${chip_per_num:.2f}/num",
+                                color='#f1c40f', size=13,
+                                weight=ft.FontWeight.BOLD),
+                    ],
+                ),
+            ],
+        )
+        
+        # For inside bets: show total + breakdown with total chips count
+        _total_lbl = ft.Text(
+            f"Total: ${total_cost:.2f}  ({total_chips} × ${chip_per_num:.2f})",
+            color='#ecf0f1', size=12, weight=ft.FontWeight.BOLD,
+            text_align=ft.TextAlign.CENTER,
+        )
+        _chip_lbl = dlg.title.controls[0].controls[-1]  # the $/num text in title row
+
+        # Multiplier picker - always show, but enabled only when progression is OFF
+        _pmx_refs: dict = {}
+
+        def _make_pmx(mx):
+            def handler(_ev):
+                self.fixed_multi = mx
+                _c  = self.val_fin * mx
+                _t  = total_chips * _c
+                _chip_lbl.value  = f"${_c:.2f}/num"
+                _total_lbl.value = f"Total: ${_t:.2f}  ({total_chips} × ${_c:.2f})"
+                for k, b in _pmx_refs.items():
+                    b.style = ft.ButtonStyle(
+                        bgcolor='#f39c12' if k == mx else '#3a3a3a',
+                        color=ft.Colors.WHITE,
+                    )
+                    b.update()
+                _chip_lbl.update()
+                _total_lbl.update()
+                self.update_inv_label()
+                if self.lbl_inv:
+                    self.lbl_inv.update()
+            return handler
+
+        mx_row = ft.Row(spacing=3, tight=True)
+        for _mx in (1, 2, 3, 4, 5):
+            _mb = ft.ElevatedButton(
+                content=ft.Text(f"{_mx}x", size=11,
+                                weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                expand=True, height=34,
+                style=ft.ButtonStyle(
+                    bgcolor='#f39c12' if _mx == self.fixed_multi else '#3a3a3a',
+                    color=ft.Colors.WHITE,
+                ),
+                on_click=_make_pmx(_mx),
+                disabled=self.prog_on,  # Disabled when progression is ON
+            )
+            _pmx_refs[_mx] = _mb
+            mx_row.controls.append(_mb)
+
+        popup_extra = [
+            ft.Container(height=6),
+            ft.Text("MULTIPLIER", color='#aaaaaa', size=10,
+                    text_align=ft.TextAlign.CENTER),
+            mx_row,
+        ]
+
+        # Build outside betting table sections - with highlighting DISABLED for inside bets
+        # (only highlight grid intersection numbers, not the outside field buttons)
+        outside_sections = self._build_outside_bet_sections(highlight=False)
+        
+        # Extract betting table components for layout
+        left1_bets = outside_sections.get('left1', [])     # Dozens
+        left2_bets = outside_sections.get('left2', [])     # Filters
+        right_bets = outside_sections.get('right', [])     # (empty)
+        bottom_sections = outside_sections.get('bottom', [])  # List of (type, controls) tuples
+        
+        # Build the table layout: left side (2 columns) / grid / bottom
+        if left1_bets or left2_bets or bottom_sections:
+            # Left side: TWO COLUMNS - Dozens (left1) and Filters (left2)
+            # Shift down 52px (zero row 50px + gap 2px) so cells start at row 1
+            left_panels = []
+            
+            if left1_bets:
+                left1_panel = ft.Container(
+                    width=50,
+                    padding=ft.padding.only(top=52),
+                    content=ft.Column(controls=left1_bets, spacing=2, tight=True,
+                                     horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                )
+                left_panels.append(left1_panel)
+            
+            if left2_bets:
+                left2_panel = ft.Container(
+                    width=50,
+                    padding=ft.padding.only(top=52),
+                    content=ft.Column(controls=left2_bets, spacing=2, tight=True,
+                                     horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                )
+                left_panels.append(left2_panel)
+            
+            # Combined left side (both columns in a row)
+            left_side = ft.Row(controls=left_panels, spacing=2, tight=True) if left_panels else None
+            
+            # Center: Roulette grid with left side
+            middle_row_controls = []
+            if left_side:
+                middle_row_controls.append(left_side)
+            middle_row_controls.append(grid)
+            
+            middle_row = ft.Row(
+                controls=middle_row_controls,
+                spacing=2, tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+            )
+            
+            # Bottom sections: columns (34, 35, 36)
+            bottom_panels = []
+            for section_type, section_controls in bottom_sections:
+                if section_type == 'columns':
+                    # Columns as compact row - no expand, just 3x50px
+                    panel = ft.Row(controls=section_controls, spacing=2, tight=True)
+                    bottom_panels.append(panel)
+            
+            # Combine middle and bottom
+            table_layout_controls = [middle_row]
+            if bottom_panels:
+                table_layout_controls.append(ft.Container(height=4))
+                for panel in bottom_panels:
+                    table_layout_controls.append(panel)
+            
+            main_content = ft.Column(controls=table_layout_controls, spacing=0, tight=True,
+                                    horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+        else:
+            # No outside bets, just show roulette grid centered
+            main_content = grid
+        
+        dlg.content = ft.Column(
+            tight=True,
+            scroll=ft.ScrollMode.AUTO,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Container(height=4),
+                main_content,
                 ft.Container(height=8),
                 _total_lbl,
             ] + popup_extra,
@@ -3526,21 +4268,15 @@ class LinupApp:
     def confirmar_manual(self, e=None):
         if not self.grupos_activos:
             return
-        # Skip popup for outside bets, show it for inside/straight bets
-        if self._is_outside_bet_type():
-            self._proceed_bet()
-        else:
-            self._show_roulette_chip_popup(self._proceed_bet)
+        # Show comprehensive popup for ALL bet types
+        self._show_roulette_chip_popup(self._proceed_bet)
 
     def auto_invertir_sug(self, grupos):
         self.limpiar_seleccion_visual()
         self.grupos_activos = list(grupos)
         self._refresh_mixer_colors()
-        # Skip popup for outside bets
-        if self._is_outside_bet_type():
-            self._proceed_bet()
-        else:
-            self._show_roulette_chip_popup(self._proceed_bet)
+        # Show comprehensive popup for suggested bets too
+        self._show_roulette_chip_popup(self._proceed_bet)
 
     # ──────────────────────────────────────────────────────────────────
     # SUGGESTIONS
@@ -3702,22 +4438,25 @@ class LinupApp:
             return
         if self.activa or self.grupos_activos:
             total, _ = self._compute_bet()
-            is_out = self._is_outside()
-            multi  = self._current_multi(is_out)
-            if is_out:
-                chip_val  = self.val_fout
-                n_grp     = len(self.grupos_activos)
-                num_chips = multi * n_grp   # per-group × number of groups
+            is_simple_outside = self._is_simple_outside_bet()
+            multi  = self._current_multi(is_simple_outside)
+            
+            # Outside bets: show only total cost, no chip breakdown
+            if is_simple_outside:
+                self.lbl_inv.value = f"BET: ${total:.2f}"
             else:
+                # Inside bets: show chip breakdown
                 chip_val  = self.val_fin
-                # Sniper mode: use intersection size; regular mode: use multiplicity-weighted sum
+                # Sniper mode: use intersection size; regular mode: use safety level sum
                 if self.sniper_mode:
                     intersection = self._compute_intersection()
                     num_chips = len(intersection) * multi
                 else:
-                    num_chips = sum(len(GRUPOS_MAESTROS[g]) for g in self.grupos_activos) * multi
-            prog_tag = "" if self.prog_on else f" [{multi}x]"
-            self.lbl_inv.value = f"BET: ${total:.2f} ({num_chips}x${chip_val:.4g}){prog_tag}"
+                    # Use sum of safety levels (total chips wagered)
+                    safety_levels = self._compute_safety_levels()
+                    num_chips = sum(safety_levels.values()) * multi
+                prog_tag = "" if self.prog_on else f" [{multi}x]"
+                self.lbl_inv.value = f"BET: ${total:.2f} ({num_chips}x${chip_val:.4g}){prog_tag}"
         else:
             self.lbl_inv.value = "BET: $0.00"
 
