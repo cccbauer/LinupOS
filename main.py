@@ -1720,8 +1720,8 @@ class LinupApp:
             csv_path = self._export_to_csv(investment_id, inv_name, session_data,
                                           bucket_labels, bucket_counts, kpis_for_export)
             # Export to PDF
-            pdf_path = self._export_to_pdf(investment_id, inv_name, session_data,
-                                          bucket_labels, bucket_counts, kpis_for_export)
+            pdf_path, pdf_error = self._export_to_pdf(investment_id, inv_name, session_data,
+                                                       bucket_labels, bucket_counts, kpis_for_export)
             
             # Show result dialog
             msg = ""
@@ -1732,7 +1732,9 @@ class LinupApp:
             if pdf_path:
                 msg += f"✓ PDF: {os.path.basename(pdf_path)}"
             else:
-                msg += "✗ PDF export failed"
+                msg += f"✗ PDF export failed"
+                if pdf_error:
+                    msg += f"\n\n{pdf_error}"
             
             dlg = ft.AlertDialog(
                 title=ft.Text("Export Complete", color='#3498db', weight=ft.FontWeight.BOLD),
@@ -2242,15 +2244,18 @@ class LinupApp:
             return None
 
     def _export_to_pdf(self, investment_id: int, inv_name: str, session_data: list,
-                       bucket_labels: list, bucket_counts: list, kpis: dict) -> str:
-        """Export session data and KPIs to PDF file. Returns file path."""
+                       bucket_labels: list, bucket_counts: list, kpis: dict) -> tuple:
+        """Export session data and KPIs to PDF file. Returns (file_path, error_msg) tuple."""
         try:
-            from reportlab.lib.pagesizes import letter, A4
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-            from reportlab.lib.units import inch
-            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
-            from reportlab.lib import colors
-            from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+            try:
+                from reportlab.lib.pagesizes import letter, A4
+                from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                from reportlab.lib.units import inch
+                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+                from reportlab.lib import colors
+                from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+            except ImportError:
+                return None, "reportlab not installed. Run: pip install reportlab>=4.0.0"
             
             # Create filename with timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -2357,9 +2362,9 @@ class LinupApp:
             story.append(session_table)
             
             doc.build(story)
-            return filepath
+            return filepath, None
         except Exception as e:
-            return None
+            return None, f"PDF Error: {str(e)}"
 
     # ──────────────────────────────────────────────────────────────────
     # LOAD INVESTMENT
