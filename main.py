@@ -1985,7 +1985,7 @@ class LinupApp:
                     shapes.append(cv.Path(
                         elements=[
                             cv.Path.MoveTo(x=center_x, y=center_y),
-                            cv.Path.Arc(x=center_x, y=center_y, x_radius=radius, y_radius=radius,
+                            cv.Path.Arc(x=center_x, y=center_y, radius=radius,
                                        start_angle=start_angle * 3.14159 / 180, sweep_angle=angle_span * 3.14159 / 180),
                             cv.Path.Close(),
                         ],
