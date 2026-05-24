@@ -2314,13 +2314,13 @@ class LinupApp:
                     chart_height = 2*inch
                     x_step = chart_width / (len(capitals) - 1) if len(capitals) > 1 else chart_width
                     
-                    # Y-axis labels
-                    drawing.add(String(0.15*inch, 0.1*inch + chart_height + 0.1*inch, f"${min_capital:.2f}", fontSize=8))
-                    drawing.add(String(0.15*inch, 0.1*inch + chart_height/2, f"${(min_capital + max_capital)/2:.2f}", fontSize=8))
-                    drawing.add(String(0.15*inch, 0.1*inch + chart_height + 0.05*inch, f"${max_capital:.2f}", fontSize=8))
+                    # Y-axis labels (positioned outside, left of chart)
+                    drawing.add(String(0.05*inch, 0.1*inch - 0.1*inch, f"${max_capital:.0f}", fontSize=7, textAnchor="end"))  # Top
+                    drawing.add(String(0.05*inch, 0.1*inch + chart_height/2 - 0.05*inch, f"${(min_capital + max_capital)/2:.0f}", fontSize=7, textAnchor="end"))  # Middle
+                    drawing.add(String(0.05*inch, 0.1*inch + chart_height + 0.05*inch, f"${min_capital:.0f}", fontSize=7, textAnchor="end"))  # Bottom
                     
                     # Y-axis label
-                    drawing.add(String(0.02*inch, 0.8*inch, "Capital ($)", fontSize=9, textAnchor="start"))
+                    drawing.add(String(0.01*inch, 0.1*inch + chart_height/2, "Capital ($)", fontSize=8, textAnchor="start"))
                     
                     # Draw grid lines
                     for i in range(len(capitals)):
@@ -2369,13 +2369,13 @@ class LinupApp:
                 bar_width = chart_width / max(len(return_pcts), 1)
                 center_y = 0.35*inch + chart_height / 2
                 
-                # Y-axis labels
-                drawing.add(String(0.15*inch, 0.35*inch + chart_height + 0.05*inch, f"{min_ret:.1f}%", fontSize=8))
-                drawing.add(String(0.15*inch, center_y, "0%", fontSize=8))
-                drawing.add(String(0.15*inch, 0.35*inch + chart_height + 0.05*inch, f"{max_ret:.1f}%", fontSize=8))
+                # Y-axis labels (positioned outside, left of chart)
+                drawing.add(String(0.05*inch, 0.35*inch + chart_height - 0.05*inch, f"{max_ret:.1f}%", fontSize=7, textAnchor="end"))  # Top
+                drawing.add(String(0.05*inch, center_y - 0.05*inch, "0%", fontSize=7, textAnchor="end"))  # Center
+                drawing.add(String(0.05*inch, 0.35*inch - 0.05*inch, f"{min_ret:.1f}%", fontSize=7, textAnchor="end"))  # Bottom
                 
                 # Y-axis label
-                drawing.add(String(0.02*inch, 0.9*inch, "Return %", fontSize=9, textAnchor="start"))
+                drawing.add(String(0.01*inch, 0.35*inch + chart_height/2, "Return %", fontSize=8, textAnchor="start"))
                 
                 # Draw center line
                 drawing.add(Line(0.4*inch, center_y, 0.4*inch + chart_width, center_y, 
@@ -2448,11 +2448,11 @@ class LinupApp:
                                     strokeColor=colors.grey, strokeWidth=2))
                     
                     # Y-axis label
-                    drawing.add(String(0.02*inch, 0.9*inch, "Distribution", fontSize=9, textAnchor="start"))
+                    drawing.add(String(0.01*inch, 0.8*inch, "Distribution", fontSize=8, textAnchor="start"))
                     
                     # X-axis labels
-                    drawing.add(String(center_x * 0.5, 0.05*inch, "Negative", fontSize=8, textAnchor="middle"))
-                    drawing.add(String(center_x + (chart_width - center_x*2)*0.5 + center_x, 0.05*inch, "Positive", fontSize=8, textAnchor="middle"))
+                    drawing.add(String(0.4*inch + (chart_width/4), -0.05*inch, "Negative", fontSize=8, textAnchor="middle"))
+                    drawing.add(String(center_x + (chart_width/4), -0.05*inch, "Positive", fontSize=8, textAnchor="middle"))
                     
                     # Legend
                     legend_y_start = 0.2*inch
