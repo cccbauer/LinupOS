@@ -2251,9 +2251,11 @@ class LinupApp:
                 from reportlab.lib.pagesizes import letter, A4
                 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
                 from reportlab.lib.units import inch
-                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
                 from reportlab.lib import colors
                 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+                from reportlab.graphics.shapes import Drawing, Line, Rect, String, Circle
+                from reportlab.graphics import renderPDF
             except ImportError:
                 return None, "reportlab not installed. Run: pip install reportlab>=4.0.0"
             
@@ -2283,7 +2285,147 @@ class LinupApp:
             # Export info
             info_style = ParagraphStyle('Info', parent=styles['Normal'], fontSize=10, textColor=colors.grey)
             story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", info_style))
-            story.append(Spacer(1, 0.2*inch))
+            story.append(Spacer(1, 0.3*inch))
+            
+            # ──────────────────────────────────────────────────────────────────
+            # CAPITAL PROGRESSION CHART
+            # ──────────────────────────────────────────────────────────────────
+            if session_data:
+                story.append(Paragraph("Capital Progression", ParagraphStyle('SectionTitle', parent=styles['Heading2'], 
+                                                                             fontSize=14, textColor=colors.HexColor('#2ecc71'))))
+                
+                # Build capital progression points
+                start_capital = float(session_data[0][1]) if session_data else 0
+                capitals = [start_capital]
+                for ret_pct, bank_start, bank_end, profit_amt, date_str in session_data:
+                    capitals.append(bank_end)
+                
+                # Create line chart drawing
+                drawing = Drawing(6*inch, 2.5*inch)
+                drawing.add(Rect(0, 0, 6*inch, 2.5*inch, fillColor=colors.HexColor('#f5f5f5'), strokeColor=colors.grey))
+                
+                if len(capitals) > 1:
+                    min_capital = min(capitals)
+                    max_capital = max(capitals)
+                    capital_range = max_capital - min_capital if max_capital != min_capital else 1
+                    
+                    # Scale factors
+                    chart_width = 5.8*inch
+                    chart_height = 2.3*inch
+                    x_step = chart_width / (len(capitals) - 1) if len(capitals) > 1 else chart_width
+                    
+                    # Draw grid lines
+                    for i in range(len(capitals)):
+                        x = 0.1*inch + (i * x_step)
+                        drawing.add(Line(x, 0.1*inch, x, 0.1*inch + chart_height, strokeColor=colors.grey, strokeWidth=0.5))
+                    
+                    # Draw capital line
+                    for i in range(len(capitals) - 1):
+                        x1 = 0.1*inch + (i * x_step)
+                        y1 = 0.1*inch + chart_height - ((capitals[i] - min_capital) / capital_range * chart_height)
+                        x2 = 0.1*inch + ((i + 1) * x_step)
+                        y2 = 0.1*inch + chart_height - ((capitals[i + 1] - min_capital) / capital_range * chart_height)
+                        drawing.add(Line(x1, y1, x2, y2, strokeColor=colors.HexColor('#3498db'), strokeWidth=2))
+                        drawing.add(Circle(x1, y1, 2, fillColor=colors.HexColor('#3498db')))
+                
+                story.append(drawing)
+                story.append(Spacer(1, 0.2*inch))
+            
+            # ──────────────────────────────────────────────────────────────────
+            # RETURN % BAR CHART
+            # ──────────────────────────────────────────────────────────────────
+            return_pcts = [r for r, _, _, _, _ in session_data]
+            if return_pcts:
+                story.append(Paragraph("Return % per Session", ParagraphStyle('SectionTitle', parent=styles['Heading2'], 
+                                                                              fontSize=14, textColor=colors.HexColor('#2ecc71'))))
+                
+                min_ret = min(return_pcts) if return_pcts else 0
+                max_ret = max(return_pcts) if return_pcts else 0
+                ret_range = max_ret - min_ret
+                if ret_range == 0:
+                    min_ret, max_ret = -1, 1
+                else:
+                    padding = ret_range * 0.05
+                    min_ret -= padding
+                    max_ret += padding
+                
+                drawing = Drawing(6*inch, 2.2*inch)
+                drawing.add(Rect(0, 0, 6*inch, 2.2*inch, fillColor=colors.HexColor('#f5f5f5'), strokeColor=colors.grey))
+                
+                chart_width = 5.8*inch
+                chart_height = 2*inch
+                bar_width = chart_width / max(len(return_pcts), 1)
+                center_y = 0.1*inch + chart_height / 2
+                
+                # Draw center line
+                drawing.add(Line(0.1*inch, center_y, 0.1*inch + chart_width, center_y, 
+                                strokeColor=colors.grey, strokeWidth=1))
+                
+                # Draw bars (limit to 20)
+                n_bars = min(len(return_pcts), 20)
+                for i in range(n_bars):
+                    idx = int(i * len(return_pcts) / n_bars)
+                    ret = return_pcts[idx]
+                    max_abs = max(abs(min_ret), abs(max_ret))
+                    bar_height_px = (ret / max_abs) * (chart_height / 2)
+                    
+                    x = 0.1*inch + (i * bar_width) + (bar_width * 0.4)
+                    if ret >= 0:
+                        y = center_y - bar_height_px
+                    else:
+                        y = center_y
+                        bar_height_px = abs(bar_height_px)
+                    
+                    bar_color = colors.HexColor('#2ecc71') if ret > 0 else colors.HexColor('#e74c3c')
+                    drawing.add(Rect(x, y, bar_width * 0.2, bar_height_px, 
+                                    fillColor=bar_color, strokeColor=bar_color))
+                
+                story.append(drawing)
+                story.append(Spacer(1, 0.2*inch))
+            
+            # ──────────────────────────────────────────────────────────────────
+            # DISTRIBUTION CHART
+            # ──────────────────────────────────────────────────────────────────
+            if bucket_counts:
+                story.append(Paragraph("Session Distribution", ParagraphStyle('SectionTitle', parent=styles['Heading2'], 
+                                                                              fontSize=14, textColor=colors.HexColor('#2ecc71'))))
+                
+                total_sessions = sum(bucket_counts)
+                if total_sessions > 0:
+                    drawing = Drawing(6*inch, 1.8*inch)
+                    drawing.add(Rect(0, 0, 6*inch, 1.8*inch, fillColor=colors.HexColor('#f5f5f5'), strokeColor=colors.grey))
+                    
+                    bar_height = 0.25*inch
+                    chart_width = 5.8*inch
+                    center_x = 0.1*inch + chart_width / 2
+                    bucket_colors_hex = ['#c0392b', '#e67e22', '#95a5a6', '#3498db', '#2ecc71']
+                    
+                    # Draw negatives (left) and positives (right)
+                    for idx, (label, count, color_hex) in enumerate(zip(bucket_labels, bucket_counts, bucket_colors_hex)):
+                        pct = (count / total_sessions * 100) if total_sessions > 0 else 0
+                        bar_width_px = (chart_width / 2 - 0.2*inch) * (pct / 100)
+                        y = 0.1*inch + idx * (bar_height + 0.05*inch)
+                        
+                        if idx < 2:  # Negatives (left)
+                            x = center_x - bar_width_px
+                        else:  # Positives (right)
+                            x = center_x
+                        
+                        drawing.add(Rect(x, y, bar_width_px, bar_height,
+                                        fillColor=colors.HexColor(color_hex), strokeColor=colors.grey))
+                    
+                    # Center line
+                    drawing.add(Line(center_x, 0.05*inch, center_x, 0.05*inch + 5*bar_height + 4*0.05*inch,
+                                    strokeColor=colors.grey, strokeWidth=2))
+                    
+                    story.append(drawing)
+                
+                story.append(Spacer(1, 0.3*inch))
+            
+            # ──────────────────────────────────────────────────────────────────
+            # PAGE BREAK BEFORE TABLES
+            # ──────────────────────────────────────────────────────────────────
+            story.append(PageBreak())
             
             # KPI Summary
             kpi_title = ParagraphStyle('SectionTitle', parent=styles['Heading2'], fontSize=14,

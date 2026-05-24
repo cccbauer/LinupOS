@@ -35,8 +35,9 @@ echo ""
 echo "[3/5] Instalando dependencias..."
 source venv/bin/activate
 pip install --upgrade pip > /dev/null 2>&1
-pip install "flet>=0.25.0"
+pip install "flet>=0.25.0" "reportlab>=4.0.0"
 echo "✓ Flet instalado"
+echo "✓ Reportlab instalado (PDF export)"
 echo ""
 
 # 4. Verify Flutter (required for macOS build)
@@ -54,9 +55,10 @@ echo ""
 # 5. Summary
 echo "[5/5] Resumen"
 echo "════════════════════════════════════════════════════════════"
-echo "Python:    $PYTHON_VERSION"
-echo "Flet:      $(pip show flet 2>/dev/null | grep Version | cut -d' ' -f2)"
-echo "Proyecto:  $(pwd)"
+echo "Python:     $PYTHON_VERSION"
+echo "Flet:       $(pip show flet 2>/dev/null | grep Version | cut -d' ' -f2)"
+echo "Reportlab:  $(pip show reportlab 2>/dev/null | grep Version | cut -d' ' -f2)"
+echo "Proyecto:   $(pwd)"
 echo "════════════════════════════════════════════════════════════"
 echo ""
 echo "✅ Environment listo!"
