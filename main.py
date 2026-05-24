@@ -2301,8 +2301,8 @@ class LinupApp:
                     capitals.append(bank_end)
                 
                 # Create line chart drawing
-                drawing = Drawing(6*inch, 2.5*inch)
-                drawing.add(Rect(0, 0, 6*inch, 2.5*inch, fillColor=colors.HexColor('#f5f5f5'), strokeColor=colors.grey))
+                drawing = Drawing(6*inch, 2.8*inch)
+                drawing.add(Rect(0, 0, 6*inch, 2.8*inch, fillColor=colors.HexColor('#f5f5f5'), strokeColor=colors.grey))
                 
                 if len(capitals) > 1:
                     min_capital = min(capitals)
@@ -2310,23 +2310,35 @@ class LinupApp:
                     capital_range = max_capital - min_capital if max_capital != min_capital else 1
                     
                     # Scale factors
-                    chart_width = 5.8*inch
-                    chart_height = 2.3*inch
+                    chart_width = 5.2*inch
+                    chart_height = 2*inch
                     x_step = chart_width / (len(capitals) - 1) if len(capitals) > 1 else chart_width
+                    
+                    # Y-axis labels
+                    drawing.add(String(0.15*inch, 0.1*inch + chart_height + 0.1*inch, f"${min_capital:.2f}", fontSize=8))
+                    drawing.add(String(0.15*inch, 0.1*inch + chart_height/2, f"${(min_capital + max_capital)/2:.2f}", fontSize=8))
+                    drawing.add(String(0.15*inch, 0.1*inch + chart_height + 0.05*inch, f"${max_capital:.2f}", fontSize=8))
+                    
+                    # Y-axis label
+                    drawing.add(String(0.02*inch, 0.8*inch, "Capital ($)", fontSize=9, textAnchor="start"))
                     
                     # Draw grid lines
                     for i in range(len(capitals)):
-                        x = 0.1*inch + (i * x_step)
+                        x = 0.4*inch + (i * x_step)
                         drawing.add(Line(x, 0.1*inch, x, 0.1*inch + chart_height, strokeColor=colors.grey, strokeWidth=0.5))
                     
                     # Draw capital line
                     for i in range(len(capitals) - 1):
-                        x1 = 0.1*inch + (i * x_step)
+                        x1 = 0.4*inch + (i * x_step)
                         y1 = 0.1*inch + chart_height - ((capitals[i] - min_capital) / capital_range * chart_height)
-                        x2 = 0.1*inch + ((i + 1) * x_step)
+                        x2 = 0.4*inch + ((i + 1) * x_step)
                         y2 = 0.1*inch + chart_height - ((capitals[i + 1] - min_capital) / capital_range * chart_height)
                         drawing.add(Line(x1, y1, x2, y2, strokeColor=colors.HexColor('#3498db'), strokeWidth=2))
                         drawing.add(Circle(x1, y1, 2, fillColor=colors.HexColor('#3498db')))
+                    
+                    # X-axis label
+                    mid_x = 0.4*inch + chart_width/2
+                    drawing.add(String(mid_x, 0.02*inch, "Sessions", fontSize=9, textAnchor="middle"))
                 
                 story.append(drawing)
                 story.append(Spacer(1, 0.2*inch))
@@ -2349,16 +2361,24 @@ class LinupApp:
                     min_ret -= padding
                     max_ret += padding
                 
-                drawing = Drawing(6*inch, 2.2*inch)
-                drawing.add(Rect(0, 0, 6*inch, 2.2*inch, fillColor=colors.HexColor('#f5f5f5'), strokeColor=colors.grey))
+                drawing = Drawing(6*inch, 2.5*inch)
+                drawing.add(Rect(0, 0, 6*inch, 2.5*inch, fillColor=colors.HexColor('#f5f5f5'), strokeColor=colors.grey))
                 
-                chart_width = 5.8*inch
+                chart_width = 5.2*inch
                 chart_height = 2*inch
                 bar_width = chart_width / max(len(return_pcts), 1)
-                center_y = 0.1*inch + chart_height / 2
+                center_y = 0.35*inch + chart_height / 2
+                
+                # Y-axis labels
+                drawing.add(String(0.15*inch, 0.35*inch + chart_height + 0.05*inch, f"{min_ret:.1f}%", fontSize=8))
+                drawing.add(String(0.15*inch, center_y, "0%", fontSize=8))
+                drawing.add(String(0.15*inch, 0.35*inch + chart_height + 0.05*inch, f"{max_ret:.1f}%", fontSize=8))
+                
+                # Y-axis label
+                drawing.add(String(0.02*inch, 0.9*inch, "Return %", fontSize=9, textAnchor="start"))
                 
                 # Draw center line
-                drawing.add(Line(0.1*inch, center_y, 0.1*inch + chart_width, center_y, 
+                drawing.add(Line(0.4*inch, center_y, 0.4*inch + chart_width, center_y, 
                                 strokeColor=colors.grey, strokeWidth=1))
                 
                 # Draw bars (limit to 20)
@@ -2369,7 +2389,7 @@ class LinupApp:
                     max_abs = max(abs(min_ret), abs(max_ret))
                     bar_height_px = (ret / max_abs) * (chart_height / 2)
                     
-                    x = 0.1*inch + (i * bar_width) + (bar_width * 0.4)
+                    x = 0.4*inch + (i * bar_width) + (bar_width * 0.4)
                     if ret >= 0:
                         y = center_y - bar_height_px
                     else:
@@ -2379,6 +2399,10 @@ class LinupApp:
                     bar_color = colors.HexColor('#2ecc71') if ret > 0 else colors.HexColor('#e74c3c')
                     drawing.add(Rect(x, y, bar_width * 0.2, bar_height_px, 
                                     fillColor=bar_color, strokeColor=bar_color))
+                
+                # X-axis label
+                mid_x = 0.4*inch + chart_width/2
+                drawing.add(String(mid_x, 0.15*inch, "Sessions", fontSize=9, textAnchor="middle"))
                 
                 story.append(drawing)
                 story.append(Spacer(1, 0.2*inch))
@@ -2392,19 +2416,19 @@ class LinupApp:
                 
                 total_sessions = sum(bucket_counts)
                 if total_sessions > 0:
-                    drawing = Drawing(6*inch, 1.8*inch)
-                    drawing.add(Rect(0, 0, 6*inch, 1.8*inch, fillColor=colors.HexColor('#f5f5f5'), strokeColor=colors.grey))
+                    drawing = Drawing(6*inch, 2.4*inch)
+                    drawing.add(Rect(0, 0, 6*inch, 2.4*inch, fillColor=colors.HexColor('#f5f5f5'), strokeColor=colors.grey))
                     
                     bar_height = 0.25*inch
-                    chart_width = 5.8*inch
-                    center_x = 0.1*inch + chart_width / 2
+                    chart_width = 5.2*inch
+                    center_x = 0.4*inch + chart_width / 2
                     bucket_colors_hex = ['#c0392b', '#e67e22', '#95a5a6', '#3498db', '#2ecc71']
                     
                     # Draw negatives (left) and positives (right)
                     for idx, (label, count, color_hex) in enumerate(zip(bucket_labels, bucket_counts, bucket_colors_hex)):
                         pct = (count / total_sessions * 100) if total_sessions > 0 else 0
                         bar_width_px = (chart_width / 2 - 0.2*inch) * (pct / 100)
-                        y = 0.1*inch + idx * (bar_height + 0.05*inch)
+                        y = 0.2*inch + idx * (bar_height + 0.05*inch)
                         
                         if idx < 2:  # Negatives (left)
                             x = center_x - bar_width_px
@@ -2413,10 +2437,30 @@ class LinupApp:
                         
                         drawing.add(Rect(x, y, bar_width_px, bar_height,
                                         fillColor=colors.HexColor(color_hex), strokeColor=colors.grey))
+                        
+                        # Add percentage label
+                        label_x = x + bar_width_px / 2 if idx >= 2 else x - 0.05*inch
+                        label_anchor = "middle" if idx >= 2 else "end"
+                        drawing.add(String(label_x, y + bar_height/2, f"{pct:.0f}%", fontSize=7, textAnchor=label_anchor))
                     
                     # Center line
-                    drawing.add(Line(center_x, 0.05*inch, center_x, 0.05*inch + 5*bar_height + 4*0.05*inch,
+                    drawing.add(Line(center_x, 0.15*inch, center_x, 0.15*inch + 5*bar_height + 4*0.05*inch,
                                     strokeColor=colors.grey, strokeWidth=2))
+                    
+                    # Y-axis label
+                    drawing.add(String(0.02*inch, 0.9*inch, "Distribution", fontSize=9, textAnchor="start"))
+                    
+                    # X-axis labels
+                    drawing.add(String(center_x * 0.5, 0.05*inch, "Negative", fontSize=8, textAnchor="middle"))
+                    drawing.add(String(center_x + (chart_width - center_x*2)*0.5 + center_x, 0.05*inch, "Positive", fontSize=8, textAnchor="middle"))
+                    
+                    # Legend
+                    legend_y_start = 0.2*inch
+                    for idx, (label, color_hex) in enumerate(zip(bucket_labels, bucket_colors_hex)):
+                        legend_y = legend_y_start + idx * 0.18*inch
+                        drawing.add(Rect(5.5*inch, legend_y, 0.15*inch, 0.12*inch, 
+                                        fillColor=colors.HexColor(color_hex), strokeColor=colors.grey))
+                        drawing.add(String(5.7*inch, legend_y + 0.03*inch, label, fontSize=7))
                     
                     story.append(drawing)
                 
