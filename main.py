@@ -1825,11 +1825,11 @@ class LinupApp:
                     expand=1,
                 ),
                 ft.ElevatedButton(
-                    "⬇  EXPORT (PDF + CSV)", on_click=export_data,
+                    "⬇  EXPORT", on_click=export_data,
                     style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE),
                     expand=1,
                 ),
-            ], spacing=8),
+            ], spacing=3),
             ft.Container(height=12),
             ft.Text(f"{inv_name}  —  ACTUAL GROWTH",
                     color='#3498db', size=14, weight=ft.FontWeight.BOLD),
@@ -1981,14 +1981,18 @@ class LinupApp:
             # ──────────────────────────────────────────────────────────────────
             # BAR CHART (Return % per session)
             # ──────────────────────────────────────────────────────────────────
-            min_ret = min(return_pcts) if return_pcts else -1
-            max_ret = max(return_pcts) if return_pcts else 1
-            # Ensure scale has some padding
+            min_ret = min(return_pcts) if return_pcts else 0
+            max_ret = max(return_pcts) if return_pcts else 0
+            # Use tighter dynamic range with minimal padding
             ret_range = max_ret - min_ret
-            if ret_range < 1.0:
-                mid = (max_ret + min_ret) / 2
-                min_ret = mid - 0.5
-                max_ret = mid + 0.5
+            if ret_range == 0:
+                min_ret = -1
+                max_ret = 1
+            else:
+                # Add small padding (5% of range) on each side for tighter display
+                padding = ret_range * 0.05
+                min_ret -= padding
+                max_ret += padding
 
             def _build_bar_chart(cw):
                 shapes = []
