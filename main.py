@@ -2533,7 +2533,9 @@ class LinupApp:
                 ])
             
             session_table = Table(session_data_table, colWidths=[0.6*inch, 1*inch, 1.2*inch, 1*inch, 1.2*inch, 1*inch])
-            session_table.setStyle(TableStyle([
+            
+            # Build table style with conditional row coloring
+            table_style = [
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
@@ -2541,10 +2543,20 @@ class LinupApp:
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, 0), 9),
                 ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.lightgrey),
                 ('GRID', (0, 0), (-1, -1), 1, colors.black),
                 ('FONTSIZE', (0, 1), (-1, -1), 8),
-            ]))
+            ]
+            
+            # Add conditional row coloring
+            for row_idx in range(1, len(session_data_table)):
+                ret_pct = float(session_data_table[row_idx][1])
+                if ret_pct > 0:
+                    bg_color = colors.HexColor('#d5f4e6')  # Light green
+                else:
+                    bg_color = colors.HexColor('#fadbd8')  # Light red
+                table_style.append(('BACKGROUND', (0, row_idx), (-1, row_idx), bg_color))
+            
+            session_table.setStyle(TableStyle(table_style))
             story.append(session_table)
             
             doc.build(story)
