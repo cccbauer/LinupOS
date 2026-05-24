@@ -1752,7 +1752,7 @@ class LinupApp:
         
         # Bucket sessions for pie chart (5 buckets)
         bucket_ranges = [(-float('inf'), -5), (-5, 0), (0, 5), (5, 10), (10, float('inf'))]
-        bucket_labels = ["-10% to -5%", "-5% to 0%", "0% to 5%", "5% to 10%", "10%+"]
+        bucket_labels = ["< -5%", "-5% to 0%", "0% to 5%", "5% to 10%", "> 10%"]
         bucket_colors = ['#c0392b', '#e67e22', '#95a5a6', '#3498db', '#2ecc71']
         bucket_counts = [0] * 5
         
@@ -1918,8 +1918,14 @@ class LinupApp:
             # ──────────────────────────────────────────────────────────────────
             # BAR CHART (Return % per session)
             # ──────────────────────────────────────────────────────────────────
-            max_ret = max(max(return_pcts), abs(min(return_pcts))) if return_pcts else 1
-            max_ret = max(max_ret, 1.0)  # Minimum scale
+            min_ret = min(return_pcts) if return_pcts else -1
+            max_ret = max(return_pcts) if return_pcts else 1
+            # Ensure scale has some padding
+            ret_range = max_ret - min_ret
+            if ret_range < 1.0:
+                mid = (max_ret + min_ret) / 2
+                min_ret = mid - 0.5
+                max_ret = mid + 0.5
 
             def _build_bar_chart(cw):
                 shapes = []
@@ -1932,7 +1938,8 @@ class LinupApp:
                                      paint=ft.Paint(color='#1a2535', style=ft.PaintingStyle.FILL)))
 
                 # Center line (0%)
-                center_y = 10 + bar_height / 2
+                center_y_pct = (0 - min_ret) / (max_ret - min_ret)
+                center_y = 10 + bar_height - (center_y_pct * bar_height)
                 shapes.append(cv.Line(x1=bar_x_start, y1=center_y, x2=bar_x_start + bar_width, y2=center_y,
                                      paint=ft.Paint(color='#666666', stroke_width=1)))
 
@@ -1942,13 +1949,15 @@ class LinupApp:
                 for i in range(n_bars):
                     idx = int(i * len(return_pcts) / n_bars)
                     ret = return_pcts[idx]
-                    bar_height_px = (ret / max_ret * bar_height / 2)
-                    bar_y = center_y - bar_height_px
+                    # Scale: normalize ret to 0-1 range within [min_ret, max_ret]
+                    pct_of_range = (ret - min_ret) / (max_ret - min_ret)
+                    bar_y = 10 + bar_height - (pct_of_range * bar_height)
+                    bar_height_px = pct_of_range * bar_height
                     bar_color = '#2ecc71' if ret > 0 else '#e74c3c'
                     bar_x = bar_x_start + (i + 1) * bar_spacing
 
                     shapes.append(cv.Rect(
-                        x=bar_x - 2, y=bar_y, width=4, height=abs(bar_height_px),
+                        x=bar_x - 2, y=bar_y, width=4, height=bar_height_px,
                         paint=ft.Paint(color=bar_color, style=ft.PaintingStyle.FILL)
                     ))
 
