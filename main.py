@@ -6,6 +6,9 @@ import math
 import random
 from datetime import datetime
 import asyncio
+import csv
+import inspect
+from pathlib import Path
 
 # --- GROUP CONFIGURATION ---
 ROJOS = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
@@ -1692,6 +1695,58 @@ class LinupApp:
         def go_back(ev):
             self.show_investment_dashboard(investment_id)
 
+        def export_data(ev):
+            """Export analytics data to CSV and PDF."""
+            # Build KPIs dict for export
+            kpis_for_export = {
+                'Total Sessions': n_sessions,
+                'Winning Sessions': n_winning,
+                'Losing Sessions': n_losing,
+                'Success Rate (%)': f"{success_rate:.1f}",
+                'Max Gain (%)': f"{max_gain:.2f}",
+                'Max Loss (%)': f"{max_loss:.2f}",
+                'Average per Session (%)': f"{avg_per_session:.2f}",
+                'Consistency': f"{consistency:.2f}",
+                'Win/Loss Ratio': f"{win_loss_ratio:.2f}",
+                'Best Streak': best_streak,
+                'Worst Streak': worst_streak,
+                'Max Drawdown (%)': f"{max_drawdown:.2f}",
+                'Initial Capital': _fv(start_capital),
+                'Final Capital': _fv(final_capital),
+                'Total Growth (%)': f"{total_return_pct:.2f}",
+            }
+            
+            # Export to CSV
+            csv_path = self._export_to_csv(investment_id, inv_name, session_data,
+                                          bucket_labels, bucket_counts, kpis_for_export)
+            # Export to PDF
+            pdf_path = self._export_to_pdf(investment_id, inv_name, session_data,
+                                          bucket_labels, bucket_counts, kpis_for_export)
+            
+            # Show result dialog
+            msg = ""
+            if csv_path:
+                msg += f"✓ CSV: {os.path.basename(csv_path)}\n"
+            else:
+                msg += "✗ CSV export failed\n"
+            if pdf_path:
+                msg += f"✓ PDF: {os.path.basename(pdf_path)}"
+            else:
+                msg += "✗ PDF export failed"
+            
+            dlg = ft.AlertDialog(
+                title=ft.Text("Export Complete", color='#3498db', weight=ft.FontWeight.BOLD),
+                content=ft.Text(msg, color=ft.Colors.WHITE),
+                modal=True, bgcolor='#1e1e1e',
+            )
+            dlg.actions = [
+                ft.ElevatedButton(
+                    "OK", on_click=lambda _e: (setattr(dlg, 'open', False), dlg.update()),
+                    style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE),
+                )
+            ]
+            self.page.show_dialog(dlg)
+
         # Always display in USD for the graph
         def _fv(v):
             return f"${v:.2f}"
@@ -1763,10 +1818,18 @@ class LinupApp:
                     break
 
         controls: list = [
-            ft.ElevatedButton(
-                "←  BACK", on_click=go_back,
-                style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE),
-            ),
+            ft.Row(controls=[
+                ft.ElevatedButton(
+                    "←  BACK", on_click=go_back,
+                    style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE),
+                    expand=1,
+                ),
+                ft.ElevatedButton(
+                    "⬇  EXPORT (PDF + CSV)", on_click=export_data,
+                    style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE),
+                    expand=1,
+                ),
+            ], spacing=8),
             ft.Container(height=12),
             ft.Text(f"{inv_name}  —  ACTUAL GROWTH",
                     color='#3498db', size=14, weight=ft.FontWeight.BOLD),
@@ -2118,6 +2181,181 @@ class LinupApp:
                 content=ft.ListView(expand=True, controls=controls),
             )
         )
+
+    # ──────────────────────────────────────────────────────────────────
+    # EXPORT ANALYTICS
+    # ──────────────────────────────────────────────────────────────────
+    def _export_to_csv(self, investment_id: int, inv_name: str, session_data: list,
+                       bucket_labels: list, bucket_counts: list, kpis: dict) -> str:
+        """Export session data and KPIs to CSV file. Returns file path."""
+        try:
+            # Create filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"LinupOS_Export_{inv_name}_{timestamp}.csv"
+            filepath = os.path.join(os.path.expanduser("~"), "Downloads", filename)
+            
+            with open(filepath, 'w', newline='') as f:
+                writer = csv.writer(f)
+                
+                # KPI Summary section
+                writer.writerow(["INVESTMENT SUMMARY"])
+                writer.writerow(["Investment", inv_name])
+                writer.writerow(["Export Date", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+                writer.writerow([])
+                
+                # KPI rows
+                writer.writerow(["KEY PERFORMANCE INDICATORS"])
+                writer.writerow(["Metric", "Value"])
+                for key, value in kpis.items():
+                    writer.writerow([key, value])
+                writer.writerow([])
+                
+                # Distribution buckets
+                writer.writerow(["SESSION DISTRIBUTION"])
+                writer.writerow(["Range", "Count"])
+                for label, count in zip(bucket_labels, bucket_counts):
+                    writer.writerow([label, count])
+                writer.writerow([])
+                
+                # Sessions table
+                writer.writerow(["SESSION DETAILS"])
+                writer.writerow(["Operation #", "Return %", "Capital Start", "P/L", "Capital End", "Cumulative %"])
+                
+                cumul_pct = 0
+                for idx, (ret_pct, bank_start, bank_end, profit_amt, date_str) in enumerate(session_data):
+                    cumul_pct += ret_pct
+                    writer.writerow([
+                        idx + 1,
+                        f"{ret_pct:.2f}",
+                        f"{bank_start:.2f}",
+                        f"{profit_amt:.2f}",
+                        f"{bank_end:.2f}",
+                        f"{cumul_pct:.2f}",
+                    ])
+            
+            return filepath
+        except Exception as e:
+            return None
+
+    def _export_to_pdf(self, investment_id: int, inv_name: str, session_data: list,
+                       bucket_labels: list, bucket_counts: list, kpis: dict) -> str:
+        """Export session data and KPIs to PDF file. Returns file path."""
+        try:
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+            from reportlab.lib import colors
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+            
+            # Create filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"LinupOS_Export_{inv_name}_{timestamp}.pdf"
+            filepath = os.path.join(os.path.expanduser("~"), "Downloads", filename)
+            
+            # Create PDF
+            doc = SimpleDocTemplate(filepath, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+            story = []
+            styles = getSampleStyleSheet()
+            
+            # Title
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                textColor=colors.HexColor('#3498db'),
+                spaceAfter=12,
+                alignment=TA_CENTER,
+                fontName='Helvetica-Bold'
+            )
+            story.append(Paragraph(f"LinupOS Investment Report: {inv_name}", title_style))
+            story.append(Spacer(1, 0.2*inch))
+            
+            # Export info
+            info_style = ParagraphStyle('Info', parent=styles['Normal'], fontSize=10, textColor=colors.grey)
+            story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", info_style))
+            story.append(Spacer(1, 0.2*inch))
+            
+            # KPI Summary
+            kpi_title = ParagraphStyle('SectionTitle', parent=styles['Heading2'], fontSize=14,
+                                      textColor=colors.HexColor('#2ecc71'), spaceAfter=8)
+            story.append(Paragraph("Key Performance Indicators", kpi_title))
+            
+            kpi_data = [["Metric", "Value"]]
+            for key, value in kpis.items():
+                kpi_data.append([str(key), str(value)])
+            
+            kpi_table = Table(kpi_data, colWidths=[3*inch, 2*inch])
+            kpi_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ]))
+            story.append(kpi_table)
+            story.append(Spacer(1, 0.3*inch))
+            
+            # Distribution
+            story.append(Paragraph("Session Distribution", kpi_title))
+            dist_data = [["Range", "Count"]]
+            for label, count in zip(bucket_labels, bucket_counts):
+                dist_data.append([label, str(count)])
+            
+            dist_table = Table(dist_data, colWidths=[2.5*inch, 1*inch])
+            dist_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ]))
+            story.append(dist_table)
+            story.append(Spacer(1, 0.3*inch))
+            
+            # Session Details
+            story.append(Paragraph("Session Details", kpi_title))
+            session_data_table = [["Op#", "Return %", "Start", "P/L", "End", "Cumul %"]]
+            
+            cumul_pct = 0
+            for idx, (ret_pct, bank_start, bank_end, profit_amt, date_str) in enumerate(session_data):
+                cumul_pct += ret_pct
+                session_data_table.append([
+                    str(idx + 1),
+                    f"{ret_pct:.2f}",
+                    f"{bank_start:.2f}",
+                    f"{profit_amt:.2f}",
+                    f"{bank_end:.2f}",
+                    f"{cumul_pct:.2f}",
+                ])
+            
+            session_table = Table(session_data_table, colWidths=[0.6*inch, 1*inch, 1.2*inch, 1*inch, 1.2*inch, 1*inch])
+            session_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+                ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ]))
+            story.append(session_table)
+            
+            doc.build(story)
+            return filepath
+        except Exception as e:
+            return None
 
     # ──────────────────────────────────────────────────────────────────
     # LOAD INVESTMENT
