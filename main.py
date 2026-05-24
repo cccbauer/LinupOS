@@ -1705,7 +1705,7 @@ class LinupApp:
                 'Success Rate (%)': f"{success_rate:.1f}",
                 'Max Gain (%)': f"{max_gain:.2f}",
                 'Max Loss (%)': f"{max_loss:.2f}",
-                'Average per Session (%)': f"{avg_per_session:.2f}",
+                'Average per Session (%)': f"{avg_per_session:.3f}",  # 3 decimals for precision
                 'Consistency': f"{consistency:.2f}",
                 'Win/Loss Ratio': f"{win_loss_ratio:.2f}",
                 'Best Streak': best_streak,
@@ -1772,6 +1772,7 @@ class LinupApp:
         n_sessions = len(session_data)
         n_winning = sum(1 for r, _, _, _, _ in session_data if r > 0)
         n_losing = sum(1 for r, _, _, _, _ in session_data if r < 0)
+        n_neutral = n_sessions - n_winning - n_losing  # Sessions with exactly 0% return
         success_rate = (n_winning / n_sessions * 100) if n_sessions > 0 else 0
         
         return_pcts = [r for r, _, _, _, _ in session_data]
@@ -1784,7 +1785,7 @@ class LinupApp:
         total_losses = abs(sum(r for r in return_pcts if r < 0))
         win_loss_ratio = (total_gains / total_losses) if total_losses > 0 else (total_gains if total_gains > 0 else 0)
         
-        # Calculate streaks
+        # Calculate streaks (0% returns treated as neutral, not losses)
         best_streak = 0
         worst_streak = 0
         current_win_streak = 0
@@ -1794,10 +1795,13 @@ class LinupApp:
                 current_win_streak += 1
                 current_loss_streak = 0
                 best_streak = max(best_streak, current_win_streak)
-            else:
+            elif r < 0:  # Only count negative as losses, not 0%
                 current_loss_streak += 1
                 current_win_streak = 0
                 worst_streak = max(worst_streak, current_loss_streak)
+            else:  # r == 0
+                current_win_streak = 0
+                current_loss_streak = 0
         
         # Calculate max drawdown
         max_capital = start_capital
@@ -1814,10 +1818,16 @@ class LinupApp:
         bucket_counts = [0] * 5
         
         for r, _, _, _, _ in session_data:
-            for i, (low, high) in enumerate(bucket_ranges):
-                if low < r <= high or (i == 0 and r <= low) or (i == 4 and r >= high):
-                    bucket_counts[i] += 1
-                    break
+            if r < -5:
+                bucket_counts[0] += 1
+            elif r <= 0:
+                bucket_counts[1] += 1
+            elif r <= 5:
+                bucket_counts[2] += 1
+            elif r <= 10:
+                bucket_counts[3] += 1
+            else:
+                bucket_counts[4] += 1
 
         controls: list = [
             ft.Row(controls=[
@@ -1855,7 +1865,7 @@ class LinupApp:
                 (f"Éxito", f"{success_rate:.1f}%", '#3498db'),
                 (f"Max ganancia", f"+{max_gain:.2f}%", '#2ecc71'),
                 (f"Max pérdida", f"{max_loss:.2f}%", '#e74c3c'),
-                (f"Promedio por sesión", f"{avg_per_session:+.2f}%", '#f39c12'),
+                (f"Promedio por sesión", f"{avg_per_session:+.3f}%", '#f39c12'),  # Show 3 decimals for precision
                 (f"Consistencia", f"{consistency:.2f}%", '#9b59b6'),
                 (f"Relación Ganancia/Pérdida", f"{win_loss_ratio:.2f}", '#3498db'),
                 (f"Mejor racha", f"{best_streak}", '#2ecc71'),
