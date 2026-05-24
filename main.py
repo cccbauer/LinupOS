@@ -1970,45 +1970,35 @@ class LinupApp:
                 if total_sessions == 0:
                     return shapes
 
-                center_x = cw / 2
-                center_y = 70
-                radius = 50
+                bar_height = 12
+                spacing = 4
+                y_start = 10
 
-                start_angle = -90
                 for i, count in enumerate(bucket_counts):
                     if count == 0:
                         continue
-                    angle_span = (count / total_sessions) * 360
-                    end_angle = start_angle + angle_span
+                    pct = (count / total_sessions * 100)
+                    bar_width = (cw - 20) * (pct / 100)
+                    y = y_start + i * (bar_height + spacing)
 
-                    # Draw slice
+                    # Draw colored bar
                     shapes.append(cv.Path(
                         elements=[
-                            cv.Path.MoveTo(x=center_x, y=center_y),
-                            cv.Path.Arc(x=center_x, y=center_y, radius=radius,
-                                       start_angle=start_angle * 3.14159 / 180, sweep_angle=angle_span * 3.14159 / 180),
+                            cv.Path.MoveTo(x=10, y=y),
+                            cv.Path.LineTo(x=10 + bar_width, y=y),
+                            cv.Path.LineTo(x=10 + bar_width, y=y + bar_height),
+                            cv.Path.LineTo(x=10, y=y + bar_height),
                             cv.Path.Close(),
                         ],
                         paint=ft.Paint(color=bucket_colors[i], style=ft.PaintingStyle.FILL)
                     ))
 
                     # Label
-                    mid_angle = (start_angle + end_angle) / 2 * 3.14159 / 180
-                    label_x = center_x + (radius * 0.65) * ft.app.AppContext().session.data.get('cos', lambda x: __import__('math').cos)(mid_angle)
-                    label_y = center_y + (radius * 0.65) * ft.app.AppContext().session.data.get('sin', lambda x: __import__('math').sin)(mid_angle)
-                    
-                    import math
-                    label_x = center_x + (radius * 0.65) * math.cos(mid_angle)
-                    label_y = center_y + (radius * 0.65) * math.sin(mid_angle)
-                    
-                    pct = (count / total_sessions * 100)
-                    shapes.append(_cv_text(label_x - 8, label_y - 4, f"{pct:.0f}%", color='#ffffff', size=9))
-
-                    start_angle = end_angle
+                    shapes.append(_cv_text(10 + bar_width + 6, y + 2, f"{pct:.0f}%", color='#ffffff', size=9))
 
                 return shapes
 
-            pie_chart = cv.Canvas(shapes=[], expand=True, height=160, resize_interval=0,
+            pie_chart = cv.Canvas(shapes=[], expand=True, height=140, resize_interval=0,
                                  on_resize=lambda e: (setattr(pie_chart, 'shapes', _build_pie_chart(e.width)) or pie_chart.update()))
 
             # Legend
