@@ -1674,8 +1674,8 @@ class LinupApp:
             try:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT id, date_str, profit, mesa, bank_start, bank_end FROM compound_sessions "
-                    "WHERE investment_id=? ORDER BY id",
+                    "SELECT rowid, date, profit, mesa, bank_start, bank_end FROM compound_sessions "
+                    "WHERE investment_id=? ORDER BY rowid",
                     (investment_id,)
                 )
                 sessions = cursor.fetchall()
