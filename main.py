@@ -1938,21 +1938,29 @@ class LinupApp:
                                      paint=ft.Paint(color='#1a2535', style=ft.PaintingStyle.FILL)))
 
                 # Center line (0%)
-                center_y_pct = (0 - min_ret) / (max_ret - min_ret)
-                center_y = 10 + bar_height - (center_y_pct * bar_height)
+                center_y = 10 + bar_height / 2
                 shapes.append(cv.Line(x1=bar_x_start, y1=center_y, x2=bar_x_start + bar_width, y2=center_y,
                                      paint=ft.Paint(color='#666666', stroke_width=1)))
 
-                # Bars
+                # Bars - positive go up, negative go down from center
                 n_bars = min(len(return_pcts), 20)  # Limit to 20 bars for visibility
                 bar_spacing = bar_width / (n_bars + 1)
+                max_abs_ret = max(abs(min_ret), abs(max_ret)) if max_ret != min_ret else 1
+                
                 for i in range(n_bars):
                     idx = int(i * len(return_pcts) / n_bars)
                     ret = return_pcts[idx]
-                    # Scale: normalize ret to 0-1 range within [min_ret, max_ret]
-                    pct_of_range = (ret - min_ret) / (max_ret - min_ret)
-                    bar_y = 10 + bar_height - (pct_of_range * bar_height)
-                    bar_height_px = pct_of_range * bar_height
+                    # Normalize to -1 to +1 range (relative to max absolute value)
+                    bar_height_px = (ret / max_abs_ret) * (bar_height / 2)
+                    
+                    if ret >= 0:
+                        # Positive: draw upward from center
+                        bar_y = center_y - bar_height_px
+                    else:
+                        # Negative: draw downward from center
+                        bar_y = center_y
+                        bar_height_px = abs(bar_height_px)
+                    
                     bar_color = '#2ecc71' if ret > 0 else '#e74c3c'
                     bar_x = bar_x_start + (i + 1) * bar_spacing
 
@@ -1981,33 +1989,70 @@ class LinupApp:
 
                 bar_height = 12
                 spacing = 4
+                chart_width = cw - 40
+                center_x = 20 + chart_width / 2
+                
+                # Split into negatives (left) and positives (right)
+                neg_indices = [0, 1]      # < -5%, -5% to 0%
+                pos_indices = [2, 3, 4]   # 0% to 5%, 5% to 10%, > 10%
+                
                 y_start = 10
-
-                for i, count in enumerate(bucket_counts):
+                
+                # Draw negatives on the left (extending leftward from center)
+                for idx, i in enumerate(neg_indices):
+                    count = bucket_counts[i]
                     if count == 0:
                         continue
                     pct = (count / total_sessions * 100)
-                    bar_width = (cw - 20) * (pct / 100)
-                    y = y_start + i * (bar_height + spacing)
-
-                    # Draw colored bar
+                    bar_width = (chart_width / 2 - 10) * (pct / 100)  # Left half
+                    y = y_start + idx * (bar_height + spacing)
+                    
+                    # Draw from center leftward (bar extends left from center_x)
                     shapes.append(cv.Path(
                         elements=[
-                            cv.Path.MoveTo(x=10, y=y),
-                            cv.Path.LineTo(x=10 + bar_width, y=y),
-                            cv.Path.LineTo(x=10 + bar_width, y=y + bar_height),
-                            cv.Path.LineTo(x=10, y=y + bar_height),
+                            cv.Path.MoveTo(x=center_x - bar_width, y=y),
+                            cv.Path.LineTo(x=center_x, y=y),
+                            cv.Path.LineTo(x=center_x, y=y + bar_height),
+                            cv.Path.LineTo(x=center_x - bar_width, y=y + bar_height),
                             cv.Path.Close(),
                         ],
                         paint=ft.Paint(color=bucket_colors[i], style=ft.PaintingStyle.FILL)
                     ))
-
-                    # Label
-                    shapes.append(_cv_text(10 + bar_width + 6, y + 2, f"{pct:.0f}%", color='#ffffff', size=9))
+                    
+                    # Label on the left side
+                    shapes.append(_cv_text(center_x - bar_width - 30, y + 2, f"{pct:.0f}%", color='#ffffff', size=8))
+                
+                # Center line
+                shapes.append(cv.Line(x1=center_x, y1=y_start, x2=center_x, y2=y_start + 120,
+                                     paint=ft.Paint(color='#666666', stroke_width=2)))
+                
+                # Draw positives on the right (extending rightward from center)
+                for idx, i in enumerate(pos_indices):
+                    count = bucket_counts[i]
+                    if count == 0:
+                        continue
+                    pct = (count / total_sessions * 100)
+                    bar_width = (chart_width / 2 - 10) * (pct / 100)  # Right half
+                    y = y_start + idx * (bar_height + spacing)
+                    
+                    # Draw from center rightward (bar extends right from center_x)
+                    shapes.append(cv.Path(
+                        elements=[
+                            cv.Path.MoveTo(x=center_x, y=y),
+                            cv.Path.LineTo(x=center_x + bar_width, y=y),
+                            cv.Path.LineTo(x=center_x + bar_width, y=y + bar_height),
+                            cv.Path.LineTo(x=center_x, y=y + bar_height),
+                            cv.Path.Close(),
+                        ],
+                        paint=ft.Paint(color=bucket_colors[i], style=ft.PaintingStyle.FILL)
+                    ))
+                    
+                    # Label on the right side
+                    shapes.append(_cv_text(center_x + bar_width + 6, y + 2, f"{pct:.0f}%", color='#ffffff', size=8))
 
                 return shapes
 
-            pie_chart = cv.Canvas(shapes=[], expand=True, height=140, resize_interval=0,
+            pie_chart = cv.Canvas(shapes=[], expand=True, height=160, resize_interval=0,
                                  on_resize=lambda e: (setattr(pie_chart, 'shapes', _build_pie_chart(e.width)) or pie_chart.update()))
 
             # Legend
