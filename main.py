@@ -2337,12 +2337,12 @@ class LinupApp:
                         x = 0.4*inch + (i * x_step)
                         drawing.add(Line(x, 0.1*inch, x, 0.1*inch + chart_height, strokeColor=colors.grey, strokeWidth=0.5))
                     
-                    # Draw capital line (inverted: higher capital values go UP)
+                    # Draw capital line (higher capital values go UP)
                     for i in range(len(capitals) - 1):
                         x1 = 0.4*inch + (i * x_step)
-                        y1 = 0.1*inch + chart_height - ((capitals[i] - min_capital) / capital_range * chart_height)
+                        y1 = 0.1*inch + ((capitals[i] - min_capital) / capital_range * chart_height)
                         x2 = 0.4*inch + ((i + 1) * x_step)
-                        y2 = 0.1*inch + chart_height - ((capitals[i + 1] - min_capital) / capital_range * chart_height)
+                        y2 = 0.1*inch + ((capitals[i + 1] - min_capital) / capital_range * chart_height)
                         drawing.add(Line(x1, y1, x2, y2, strokeColor=colors.HexColor('#3498db'), strokeWidth=2))
                         drawing.add(Circle(x1, y1, 2, fillColor=colors.HexColor('#3498db')))
                     
@@ -2400,10 +2400,10 @@ class LinupApp:
                     bar_height_px = (ret / max_abs) * (chart_height / 2)
                     
                     x = 0.4*inch + (i * bar_width) + (bar_width * 0.4)
-                    if ret >= 0:  # Positive (green) goes UP
-                        y = center_y - bar_height_px
-                    else:  # Negative (red) goes DOWN
+                    if ret >= 0:  # Positive (green) goes UP from center
                         y = center_y
+                    else:  # Negative (red) goes DOWN from center
+                        y = center_y - abs(bar_height_px)
                         bar_height_px = abs(bar_height_px)
                     
                     bar_color = colors.HexColor('#2ecc71') if ret > 0 else colors.HexColor('#e74c3c')
