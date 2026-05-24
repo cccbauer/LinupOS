@@ -1656,6 +1656,7 @@ class LinupApp:
     def show_actual_graph_view(self, investment_id: int, inv_name: str,
                                inv_capital: float, inv_type: str = 'FIAT',
                                mesa_usd_rate: dict = None, usd_capital: float = 0.0):
+        """Display comprehensive growth analysis with stats, table, bar chart, pie chart."""
         import flet.canvas as cv, inspect
         # cv.Text uses 'value' in Flet ≥0.83, 'text' in older versions
         _tv = ('value' if 'value' in inspect.signature(cv.Text.__init__).parameters
@@ -1666,13 +1667,14 @@ class LinupApp:
                            style=ft.TextStyle(color=color, size=size),
                            **{_tv: str(txt)})
 
-        sessions = []  # list of (profit, mesa)
+        # Fetch detailed session data
+        sessions = []  # list of (id, date_str, profit, mesa, bank_start, bank_end)
         conn = self._get_conn()
         if conn:
             try:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT profit, mesa FROM compound_sessions "
+                    "SELECT id, date_str, profit, mesa, bank_start, bank_end FROM compound_sessions "
                     "WHERE investment_id=? ORDER BY id",
                     (investment_id,)
                 )
@@ -1694,14 +1696,71 @@ class LinupApp:
         def _fv(v):
             return f"${v:.2f}"
 
-        # Build (x, y) pairs — point 0 is starting capital
-        start_y = usd_capital if chips_mode else float(inv_capital)
-        pts = [(0, start_y)]
-        running = start_y
-        for profit, mesa in sessions:
+        # Calculate statistics
+        start_capital = usd_capital if chips_mode else float(inv_capital)
+        session_data = []  # list of (return_pct, bank_start, bank_end, profit_amount, date_str)
+        
+        running_capital = start_capital
+        for sid, date_str, profit, mesa, bank_start, bank_end in sessions:
             delta = (profit * mesa_usd_rate.get(mesa, 0.0)) if chips_mode else profit
-            running += delta
-            pts.append((len(pts), running))
+            bank_end_calc = running_capital + delta
+            return_pct = (delta / running_capital * 100) if running_capital > 0 else 0
+            session_data.append((return_pct, running_capital, bank_end_calc, delta, date_str))
+            running_capital = bank_end_calc
+
+        final_capital = running_capital
+        total_return_pct = ((final_capital - start_capital) / start_capital * 100) if start_capital > 0 else 0
+
+        # Calculate KPIs
+        n_sessions = len(session_data)
+        n_winning = sum(1 for r, _, _, _, _ in session_data if r > 0)
+        n_losing = sum(1 for r, _, _, _, _ in session_data if r < 0)
+        success_rate = (n_winning / n_sessions * 100) if n_sessions > 0 else 0
+        
+        return_pcts = [r for r, _, _, _, _ in session_data]
+        max_gain = max(return_pcts) if return_pcts else 0
+        max_loss = min(return_pcts) if return_pcts else 0
+        avg_per_session = sum(return_pcts) / n_sessions if n_sessions > 0 else 0
+        consistency = (sum((r - avg_per_session) ** 2 for r in return_pcts) / n_sessions) ** 0.5 if n_sessions > 0 else 0
+        
+        total_gains = sum(r for r in return_pcts if r > 0)
+        total_losses = abs(sum(r for r in return_pcts if r < 0))
+        win_loss_ratio = (total_gains / total_losses) if total_losses > 0 else (total_gains if total_gains > 0 else 0)
+        
+        # Calculate streaks
+        best_streak = 0
+        worst_streak = 0
+        current_win_streak = 0
+        current_loss_streak = 0
+        for r in return_pcts:
+            if r > 0:
+                current_win_streak += 1
+                current_loss_streak = 0
+                best_streak = max(best_streak, current_win_streak)
+            else:
+                current_loss_streak += 1
+                current_win_streak = 0
+                worst_streak = max(worst_streak, current_loss_streak)
+        
+        # Calculate max drawdown
+        max_capital = start_capital
+        max_drawdown = 0
+        for r, bank_start, bank_end, _, _ in session_data:
+            max_capital = max(max_capital, bank_end)
+            drawdown = ((max_capital - bank_end) / max_capital * 100) if max_capital > 0 else 0
+            max_drawdown = max(max_drawdown, drawdown)
+        
+        # Bucket sessions for pie chart (5 buckets)
+        bucket_ranges = [(-float('inf'), -5), (-5, 0), (0, 5), (5, 10), (10, float('inf'))]
+        bucket_labels = ["-10% to -5%", "-5% to 0%", "0% to 5%", "5% to 10%", "10%+"]
+        bucket_colors = ['#c0392b', '#e67e22', '#95a5a6', '#3498db', '#2ecc71']
+        bucket_counts = [0] * 5
+        
+        for r, _, _, _, _ in session_data:
+            for i, (low, high) in enumerate(bucket_ranges):
+                if low < r <= high or (i == 0 and r <= low) or (i == 4 and r >= high):
+                    bucket_counts[i] += 1
+                    break
 
         controls: list = [
             ft.ElevatedButton(
@@ -1711,18 +1770,77 @@ class LinupApp:
             ft.Container(height=12),
             ft.Text(f"{inv_name}  —  ACTUAL GROWTH",
                     color='#3498db', size=14, weight=ft.FontWeight.BOLD),
-            ft.Text(f"Start: {_fv(start_y)}  ·  {len(sessions)} sessions",
-                    color='#7f8c8d', size=12),
-            ft.Container(height=10),
+            ft.Container(height=6),
         ]
 
-        if len(pts) < 2:
+        if n_sessions == 0:
             controls.append(
                 ft.Text("No sessions saved yet — play and save sessions first.",
                         color='#7f8c8d', size=12,
                         text_align=ft.TextAlign.CENTER)
             )
         else:
+            # ──────────────────────────────────────────────────────────────────
+            # INDICATORS (KPIs)
+            # ──────────────────────────────────────────────────────────────────
+            kpi_rows = [
+                (f"Total sesiones", f"{n_sessions}", '#95a5a6'),
+                (f"Ganadoras", f"{n_winning}", '#2ecc71'),
+                (f"Perdedoras", f"{n_losing}", '#e74c3c'),
+                (f"Éxito", f"{success_rate:.1f}%", '#3498db'),
+                (f"Max ganancia", f"+{max_gain:.2f}%", '#2ecc71'),
+                (f"Max pérdida", f"{max_loss:.2f}%", '#e74c3c'),
+                (f"Promedio por sesión", f"{avg_per_session:+.2f}%", '#f39c12'),
+                (f"Consistencia", f"{consistency:.2f}%", '#9b59b6'),
+                (f"Relación Ganancia/Pérdida", f"{win_loss_ratio:.2f}", '#3498db'),
+                (f"Mejor racha", f"{best_streak}", '#2ecc71'),
+                (f"Peor racha", f"{worst_streak}", '#e74c3c'),
+                (f"Máx. drawdown", f"{max_drawdown:.2f}%", '#e67e22'),
+                (f"Capital inicial", _fv(start_capital), '#95a5a6'),
+                (f"Capital final", _fv(final_capital), '#2ecc71' if final_capital >= start_capital else '#e74c3c'),
+                (f"Crecimiento total", f"{total_return_pct:+.2f}%", '#2ecc71' if total_return_pct >= 0 else '#e74c3c'),
+            ]
+            
+            kpi_grid = []
+            for i in range(0, len(kpi_rows), 3):
+                row_items = kpi_rows[i:i+3]
+                row_controls = []
+                for label, value, color in row_items:
+                    row_controls.append(
+                        ft.Container(
+                            bgcolor='#1a2a3a',
+                            padding=8,
+                            border_radius=4,
+                            expand=True,
+                            content=ft.Column(
+                                tight=True,
+                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                                controls=[
+                                    ft.Text(label, color='#7f8c8d', size=9, text_align=ft.TextAlign.CENTER),
+                                    ft.Text(value, color=color, size=12, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
+                                ],
+                            ),
+                        )
+                    )
+                kpi_grid.append(ft.Row(controls=row_controls, spacing=4))
+            
+            controls.append(
+                ft.Container(
+                    bgcolor='#0d0d0d',
+                    padding=10,
+                    border_radius=6,
+                    content=ft.Column(controls=kpi_grid, spacing=4),
+                )
+            )
+            controls.append(ft.Container(height=12))
+
+            # ──────────────────────────────────────────────────────────────────
+            # GROWTH GRAPH
+            # ──────────────────────────────────────────────────────────────────
+            pts = [(0, start_capital)]
+            for r, bank_start, bank_end, _, _ in session_data:
+                pts.append((len(pts), bank_end))
+
             yvals  = [p[1] for p in pts]
             data_range = max(max(yvals) - min(yvals), abs(inv_capital * 0.01), 1.0)
             mid    = (max(yvals) + min(yvals)) / 2
@@ -1731,11 +1849,10 @@ class LinupApp:
             max_y  = mid + half
             y_span = max_y - min_y
             max_xi = len(pts) - 1
-            line_color = '#2ecc71' if running >= inv_capital else '#ff4444'
+            line_color = '#2ecc71' if final_capital >= start_capital else '#ff4444'
 
-            # Canvas layout constants (px)
             ML, MR, MT, MB = 62, 8, 8, 22
-            CH = 270  # total canvas height
+            CH = 240
 
             def _build_shapes(cw):
                 pw = max(cw - ML - MR, 1.0)
@@ -1745,123 +1862,211 @@ class LinupApp:
                 def sy(yv): return MT + (1.0 - (yv - min_y) / y_span) * ph
 
                 shapes = []
+                shapes.append(cv.Rect(x=ML, y=MT, width=pw, height=ph,
+                                     paint=ft.Paint(color='#1a2535', style=ft.PaintingStyle.FILL)))
 
-                # Background
-                shapes.append(cv.Rect(
-                    x=ML, y=MT, width=pw, height=ph,
-                    paint=ft.Paint(color='#1a2535',
-                                   style=ft.PaintingStyle.FILL)
-                ))
-
-                # Horizontal grid lines + Y labels
                 for i in range(5):
                     gy  = MT + i * ph / 4
                     val = max_y - i * y_span / 4
-                    shapes.append(cv.Line(
-                        x1=ML, y1=gy, x2=ML + pw, y2=gy,
-                        paint=ft.Paint(color='#2a2a2a', stroke_width=1)
-                    ))
+                    shapes.append(cv.Line(x1=ML, y1=gy, x2=ML + pw, y2=gy,
+                                         paint=ft.Paint(color='#2a2a2a', stroke_width=1)))
                     shapes.append(_cv_text(0, gy - 6, _fv(val)))
 
-                # Break-even dashed line
-                bey = sy(inv_capital)
+                bey = sy(start_capital)
                 if MT <= bey <= MT + ph:
                     x = ML
                     while x < ML + pw:
-                        shapes.append(cv.Line(
-                            x1=x, y1=bey,
-                            x2=min(x + 4, ML + pw), y2=bey,
-                            paint=ft.Paint(color='#666666', stroke_width=1)
-                        ))
+                        shapes.append(cv.Line(x1=x, y1=bey, x2=min(x + 4, ML + pw), y2=bey,
+                                             paint=ft.Paint(color='#666666', stroke_width=1)))
                         x += 8
 
-                # Fill under data line
                 fill = [cv.Path.MoveTo(x=sx(pts[0][0]), y=sy(pts[0][1]))]
                 for xi, yi in pts[1:]:
                     fill.append(cv.Path.LineTo(x=sx(xi), y=sy(yi)))
                 fill.append(cv.Path.LineTo(x=sx(pts[-1][0]), y=MT + ph))
                 fill.append(cv.Path.LineTo(x=sx(0), y=MT + ph))
                 fill.append(cv.Path.Close())
-                shapes.append(cv.Path(
-                    elements=fill,
-                    paint=ft.Paint(color=line_color + '33',
-                                   style=ft.PaintingStyle.FILL)
-                ))
+                shapes.append(cv.Path(elements=fill, paint=ft.Paint(color=line_color + '33', style=ft.PaintingStyle.FILL)))
 
-                # Data line
                 line = [cv.Path.MoveTo(x=sx(pts[0][0]), y=sy(pts[0][1]))]
                 for xi, yi in pts[1:]:
                     line.append(cv.Path.LineTo(x=sx(xi), y=sy(yi)))
-                shapes.append(cv.Path(
-                    elements=line,
-                    paint=ft.Paint(color=line_color, stroke_width=2,
-                                   style=ft.PaintingStyle.STROKE)
-                ))
+                shapes.append(cv.Path(elements=line, paint=ft.Paint(color=line_color, stroke_width=2, style=ft.PaintingStyle.STROKE)))
 
-                # Dots (only when few sessions)
                 if len(pts) <= 25:
                     for xi, yi in pts:
-                        shapes.append(cv.Circle(
-                            x=sx(xi), y=sy(yi), radius=3,
-                            paint=ft.Paint(color=line_color,
-                                           style=ft.PaintingStyle.FILL)
-                        ))
+                        shapes.append(cv.Circle(x=sx(xi), y=sy(yi), radius=3,
+                                               paint=ft.Paint(color=line_color, style=ft.PaintingStyle.FILL)))
 
-                # X-axis labels
                 x_step = max(1, round(max_xi / 5))
                 for i in range(0, len(pts), x_step):
                     shapes.append(_cv_text(sx(i) - 4, MT + ph + 4, str(i)))
 
-                # Axes border
-                shapes.append(cv.Line(
-                    x1=ML, y1=MT, x2=ML, y2=MT + ph,
-                    paint=ft.Paint(color='#444444', stroke_width=1)
-                ))
-                shapes.append(cv.Line(
-                    x1=ML, y1=MT + ph, x2=ML + pw, y2=MT + ph,
-                    paint=ft.Paint(color='#444444', stroke_width=1)
-                ))
+                shapes.append(cv.Line(x1=ML, y1=MT, x2=ML, y2=MT + ph,
+                                     paint=ft.Paint(color='#444444', stroke_width=1)))
+                shapes.append(cv.Line(x1=ML, y1=MT + ph, x2=ML + pw, y2=MT + ph,
+                                     paint=ft.Paint(color='#444444', stroke_width=1)))
+                return shapes
+
+            canvas_ctrl = cv.Canvas(shapes=[], expand=True, height=CH, resize_interval=0,
+                                   on_resize=lambda e: (setattr(canvas_ctrl, 'shapes', _build_shapes(e.width)) or canvas_ctrl.update()))
+
+            controls.append(ft.Text("Crecimiento del Capital", color='#3498db', size=12, weight=ft.FontWeight.BOLD))
+            controls.append(ft.Container(bgcolor='#0d0d0d', border_radius=8, padding=0, content=canvas_ctrl, height=CH))
+            controls.append(ft.Container(height=12))
+
+            # ──────────────────────────────────────────────────────────────────
+            # BAR CHART (Return % per session)
+            # ──────────────────────────────────────────────────────────────────
+            max_ret = max(max(return_pcts), abs(min(return_pcts))) if return_pcts else 1
+            max_ret = max(max_ret, 1.0)  # Minimum scale
+
+            def _build_bar_chart(cw):
+                shapes = []
+                bar_height = 150
+                bar_width = cw - 40
+                bar_x_start = 20
+
+                # Background
+                shapes.append(cv.Rect(x=bar_x_start, y=10, width=bar_width, height=bar_height,
+                                     paint=ft.Paint(color='#1a2535', style=ft.PaintingStyle.FILL)))
+
+                # Center line (0%)
+                center_y = 10 + bar_height / 2
+                shapes.append(cv.Line(x1=bar_x_start, y1=center_y, x2=bar_x_start + bar_width, y2=center_y,
+                                     paint=ft.Paint(color='#666666', stroke_width=1)))
+
+                # Bars
+                n_bars = min(len(return_pcts), 20)  # Limit to 20 bars for visibility
+                bar_spacing = bar_width / (n_bars + 1)
+                for i in range(n_bars):
+                    idx = int(i * len(return_pcts) / n_bars)
+                    ret = return_pcts[idx]
+                    bar_height_px = (ret / max_ret * bar_height / 2)
+                    bar_y = center_y - bar_height_px
+                    bar_color = '#2ecc71' if ret > 0 else '#e74c3c'
+                    bar_x = bar_x_start + (i + 1) * bar_spacing
+
+                    shapes.append(cv.Rect(
+                        x=bar_x - 2, y=bar_y, width=4, height=abs(bar_height_px),
+                        paint=ft.Paint(color=bar_color, style=ft.PaintingStyle.FILL)
+                    ))
 
                 return shapes
 
-            canvas_ctrl = cv.Canvas(
-                shapes=[],
-                expand=True,
-                height=CH,
-                resize_interval=0,
-                on_resize=lambda e: (
-                    setattr(canvas_ctrl, 'shapes', _build_shapes(e.width))
-                    or canvas_ctrl.update()
-                ),
-            )
+            bar_chart = cv.Canvas(shapes=[], expand=True, height=180, resize_interval=0,
+                                 on_resize=lambda e: (setattr(bar_chart, 'shapes', _build_bar_chart(e.width)) or bar_chart.update()))
 
+            controls.append(ft.Text("Retorno por Sesión (%)", color='#3498db', size=12, weight=ft.FontWeight.BOLD))
+            controls.append(ft.Container(bgcolor='#0d0d0d', border_radius=8, padding=0, content=bar_chart, height=180))
+            controls.append(ft.Container(height=12))
+
+            # ──────────────────────────────────────────────────────────────────
+            # PIE CHART (Session buckets)
+            # ──────────────────────────────────────────────────────────────────
+            def _build_pie_chart(cw):
+                shapes = []
+                total_sessions = sum(bucket_counts)
+                if total_sessions == 0:
+                    return shapes
+
+                center_x = cw / 2
+                center_y = 70
+                radius = 50
+
+                start_angle = -90
+                for i, count in enumerate(bucket_counts):
+                    if count == 0:
+                        continue
+                    angle_span = (count / total_sessions) * 360
+                    end_angle = start_angle + angle_span
+
+                    # Draw slice
+                    shapes.append(cv.Path(
+                        elements=[
+                            cv.Path.MoveTo(x=center_x, y=center_y),
+                            cv.Path.Arc(x=center_x, y=center_y, x_radius=radius, y_radius=radius,
+                                       start_angle=start_angle * 3.14159 / 180, sweep_angle=angle_span * 3.14159 / 180),
+                            cv.Path.Close(),
+                        ],
+                        paint=ft.Paint(color=bucket_colors[i], style=ft.PaintingStyle.FILL)
+                    ))
+
+                    # Label
+                    mid_angle = (start_angle + end_angle) / 2 * 3.14159 / 180
+                    label_x = center_x + (radius * 0.65) * ft.app.AppContext().session.data.get('cos', lambda x: __import__('math').cos)(mid_angle)
+                    label_y = center_y + (radius * 0.65) * ft.app.AppContext().session.data.get('sin', lambda x: __import__('math').sin)(mid_angle)
+                    
+                    import math
+                    label_x = center_x + (radius * 0.65) * math.cos(mid_angle)
+                    label_y = center_y + (radius * 0.65) * math.sin(mid_angle)
+                    
+                    pct = (count / total_sessions * 100)
+                    shapes.append(_cv_text(label_x - 8, label_y - 4, f"{pct:.0f}%", color='#ffffff', size=9))
+
+                    start_angle = end_angle
+
+                return shapes
+
+            pie_chart = cv.Canvas(shapes=[], expand=True, height=160, resize_interval=0,
+                                 on_resize=lambda e: (setattr(pie_chart, 'shapes', _build_pie_chart(e.width)) or pie_chart.update()))
+
+            # Legend
+            legend_items = []
+            for label, count, color in zip(bucket_labels, bucket_counts, bucket_colors):
+                pct = (count / n_sessions * 100) if n_sessions > 0 else 0
+                legend_items.append(
+                    ft.Row(spacing=8, controls=[
+                        ft.Container(width=12, height=12, bgcolor=color, border_radius=2),
+                        ft.Text(f"{label}: {count} ({pct:.1f}%)", color='#95a5a6', size=10),
+                    ])
+                )
+
+            controls.append(ft.Text("Distribución de Sesiones", color='#3498db', size=12, weight=ft.FontWeight.BOLD))
+            controls.append(ft.Container(bgcolor='#0d0d0d', border_radius=8, padding=0, content=pie_chart, height=160))
+            controls.append(ft.Container(padding=8, content=ft.Column(controls=legend_items, spacing=4)))
+            controls.append(ft.Container(height=12))
+
+            # ──────────────────────────────────────────────────────────────────
+            # SESSIONS TABLE
+            # ──────────────────────────────────────────────────────────────────
+            table_rows = [
+                ft.Row(controls=[
+                    ft.Text("Operación", color='#7f8c8d', size=9, weight=ft.FontWeight.BOLD, expand=1),
+                    ft.Text("%", color='#7f8c8d', size=9, weight=ft.FontWeight.BOLD, expand=1),
+                    ft.Text("Capital Inicial", color='#7f8c8d', size=9, weight=ft.FontWeight.BOLD, expand=1),
+                    ft.Text("GyP", color='#7f8c8d', size=9, weight=ft.FontWeight.BOLD, expand=1),
+                    ft.Text("Capital Final", color='#7f8c8d', size=9, weight=ft.FontWeight.BOLD, expand=1),
+                    ft.Text("Acum %", color='#7f8c8d', size=9, weight=ft.FontWeight.BOLD, expand=1),
+                ], spacing=4)
+            ]
+
+            cumul_pct = 0
+            for idx, (ret_pct, bank_start, bank_end, profit_amt, date_str) in enumerate(session_data):
+                cumul_pct += ret_pct
+                ret_color = '#2ecc71' if ret_pct > 0 else '#e74c3c'
+                cumul_color = '#2ecc71' if cumul_pct > 0 else '#e74c3c'
+                
+                table_rows.append(
+                    ft.Row(controls=[
+                        ft.Text(date_str or f"Ses {idx+1}", color='#95a5a6', size=9, expand=1),
+                        ft.Text(f"{ret_pct:+.2f}%", color=ret_color, size=9, expand=1),
+                        ft.Text(_fv(bank_start), color='#95a5a6', size=9, expand=1),
+                        ft.Text(f"{profit_amt:+.2f}$", color=ret_color, size=9, expand=1),
+                        ft.Text(_fv(bank_end), color='#95a5a6', size=9, expand=1),
+                        ft.Text(f"{cumul_pct:+.2f}%", color=cumul_color, size=9, expand=1),
+                    ], spacing=4)
+                )
+
+            controls.append(ft.Text("Tabla de Sesiones", color='#3498db', size=12, weight=ft.FontWeight.BOLD))
             controls.append(
                 ft.Container(
-                    bgcolor='#0d0d0d', border_radius=8,
-                    padding=0,
-                    content=canvas_ctrl,
-                    height=CH,
+                    bgcolor='#0d0d0d',
+                    padding=8,
+                    border_radius=6,
+                    content=ft.Column(controls=table_rows, spacing=2),
                 )
             )
-
-            # Summary bar
-            final_pl = running - start_y
-            pl_pct   = (final_pl / start_y * 100) if start_y else 0
-            pl_sign  = "+" if final_pl >= 0 else ""
-            pl_col   = '#2ecc71' if final_pl >= 0 else '#ff4444'
-            controls += [
-                ft.Container(height=10),
-                ft.Container(
-                    bgcolor='#1e2d1e' if final_pl >= 0 else '#2d1e1e',
-                    padding=10, border_radius=6,
-                    content=ft.Text(
-                        f"Current: {_fv(running)}  |  "
-                        f"P/L: {pl_sign}{_fv(final_pl)} ({pl_sign}{pl_pct:.1f}%)",
-                        color=pl_col, size=13, weight=ft.FontWeight.BOLD,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                ),
-            ]
 
         self._set_view(
             ft.Container(
