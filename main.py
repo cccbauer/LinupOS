@@ -3896,7 +3896,7 @@ class LinupApp:
                 if other_groups:
                     oth_nums = set()
                     for g in self.grupos_activos:
-                        if g in GRUPOS_MAESTROS:
+                        if self._to_display_name(g) in other_groups:
                             oth_nums |= GRUPOS_MAESTROS[g]
                     type_nums.append(oth_nums)
                 
