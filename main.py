@@ -3905,7 +3905,8 @@ class LinupApp:
             else:
                 # Sniper OFF: use sum of safety levels (total chips wagered)
                 safety_levels = self._compute_safety_levels()
-                num_chips = sum(safety_levels.values()) if safety_levels else 1
+                # Only count numbers that are covered (safety level > 0)
+                num_chips = sum(v for v in safety_levels.values() if v > 0) if safety_levels else 1
                 # For payout: we hit one number at some multiplier
                 # Payout = 36 × val_fin × multi (worst case, highest multiplier)
                 # But total cost = num_chips × val_fin × multi
@@ -5158,15 +5159,15 @@ class LinupApp:
             else:
                 # Inside bets: show chip breakdown
                 chip_val  = self.val_fin
-                # Sniper mode: use intersection size; regular mode: use safety level sum
-                # NOTE: num_chips is the actual chip count, multiplier is already in total cost
+                # Sniper mode: use intersection size; regular mode: use safety level sum for covered numbers
                 if self.sniper_mode:
                     intersection = self._compute_intersection()
                     num_chips = len(intersection)
                 else:
-                    # Use sum of safety levels (total chips wagered)
+                    # Use sum of safety levels for COVERED numbers only (not all 37)
                     safety_levels = self._compute_safety_levels()
-                    num_chips = sum(safety_levels.values())
+                    # Only count numbers that are covered (safety level > 0)
+                    num_chips = sum(v for v in safety_levels.values() if v > 0)
                 prog_tag = "" if self.prog_on else f" [{multi}x]"
                 self.lbl_inv.value = f"BET: ${total:.2f} ({num_chips}x${chip_val:.4g}){prog_tag}"
         else:
