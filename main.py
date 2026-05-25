@@ -3926,7 +3926,7 @@ class LinupApp:
                 # DEBUG
                 print(f"DEBUG _compute_bet (inside, sniper OFF): num_chips={num_chips}, val_fin={self.val_fin}, multi_in={multi_in}, total={total}")
         
-        return total, win_payout
+        return total, win_payout, num_chips
 
     def process_number(self, e):
         try:
@@ -3942,7 +3942,7 @@ class LinupApp:
                 is_simple_outside     = self._is_simple_outside_bet()
                 self.last_bet_outside = is_simple_outside
                 self.last_prog_state  = self.prog_on   # save for undo
-                total_cost, win_py    = self._compute_bet()
+                total_cost, win_py, _ = self._compute_bet()
                 self.banca_actual    -= total_cost
 
                 # Sniper mode: check intersection only; regular mode: check if in any group
@@ -4245,7 +4245,7 @@ class LinupApp:
         multi        = self._current_multi(is_out=is_simple_outside)
         chip_per_num = self.val_fin * multi
         
-        total_cost, _ = self._compute_bet()   # exact amount that will hit the bank
+        total_cost, _, _ = self._compute_bet()   # exact amount that will hit the bank
         
         # For outside bets, highlight selected groups; for inside bets, highlight intersection
         if is_simple_outside:
@@ -4255,7 +4255,7 @@ class LinupApp:
     
     def _show_outside_bet_popup(self, on_ready_cb):
         """Show popup with full table: outside field buttons highlighted yellow, NO grid highlighting."""
-        total_cost, _ = self._compute_bet()
+        total_cost, _, _ = self._compute_bet()
         multi        = self._current_multi(is_out=True)
         chip_per_num = self.val_fin * multi
         
@@ -4914,7 +4914,7 @@ class LinupApp:
         if self.stop_loss_triggered or self.banca_inicial <= 0:
             on_confirm()
             return
-        total_cost, _ = self._compute_bet()
+        total_cost, _, _ = self._compute_bet()
         potential_bank = self.banca_actual - total_cost
         loss_pct = (self.banca_inicial - potential_bank) / self.banca_inicial
         if loss_pct < 0.3:
@@ -5162,7 +5162,7 @@ class LinupApp:
         if not self.lbl_inv:
             return
         if self.activa or self.grupos_activos:
-            total, _ = self._compute_bet()
+            total, _, num_chips = self._compute_bet()
             is_simple_outside = self._is_simple_outside_bet()
             multi  = self._current_multi(is_simple_outside)
             
@@ -5170,17 +5170,8 @@ class LinupApp:
             if is_simple_outside:
                 self.lbl_inv.value = f"BET: ${total:.2f}"
             else:
-                # Inside bets: show chip breakdown
+                # Inside bets: show chip breakdown (using num_chips calculated in _compute_bet)
                 chip_val  = self.val_fin
-                # Sniper mode: use intersection size; regular mode: use safety level sum for covered numbers
-                if self.sniper_mode:
-                    intersection = self._compute_intersection()
-                    num_chips = len(intersection)
-                else:
-                    # Use sum of safety levels for COVERED numbers only (not all 37)
-                    safety_levels = self._compute_safety_levels()
-                    # Only count numbers that are covered (safety level > 0)
-                    num_chips = sum(v for v in safety_levels.values() if v > 0)
                 
                 # DEBUG
                 print(f"DEBUG update_inv_label: grupos={self.grupos_activos}, sniper={self.sniper_mode}, num_chips={num_chips}, chip_val={chip_val}, multi={multi}, total={total}")
@@ -5197,7 +5188,7 @@ class LinupApp:
         # When a bet is active, immediately reflect the pending cost in bank + P/L
         displayed_bank = self.banca_actual
         if self.activa:
-            pending_cost, _ = self._compute_bet()
+            pending_cost, _, _ = self._compute_bet()
             pl -= pending_cost
             displayed_bank -= pending_cost
         pl_pct = (pl / self.banca_inicial * 100) if self.banca_inicial != 0 else 0
