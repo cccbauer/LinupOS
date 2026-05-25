@@ -3862,51 +3862,12 @@ class LinupApp:
             
             if self.sniper_mode:
                 # Sniper ON: use intersection count
-                # Calculate all numbers covered by each type
-                type_nums = []
-                
-                if col_groups:
-                    col_nums = set()
-                    for g in self.grupos_activos:
-                        if self._to_display_name(g) in columns:
-                            col_nums |= GRUPOS_MAESTROS[g]
-                    type_nums.append(col_nums)
-                
-                if doc_groups:
-                    doc_nums = set()
-                    for g in self.grupos_activos:
-                        if self._to_display_name(g) in dozens:
-                            doc_nums |= GRUPOS_MAESTROS[g]
-                    type_nums.append(doc_nums)
-                
-                if flt_groups:
-                    flt_nums = set()
-                    for g in self.grupos_activos:
-                        if self._to_display_name(g) in filters:
-                            flt_nums |= GRUPOS_MAESTROS[g]
-                    type_nums.append(flt_nums)
-                
-                if inside_grps:
-                    ins_nums = set()
-                    for g in self.grupos_activos:
-                        if self._to_display_name(g) in inside_types:
-                            ins_nums |= GRUPOS_MAESTROS[g]
-                    type_nums.append(ins_nums)
-                
-                if other_groups:
-                    oth_nums = set()
-                    for g in self.grupos_activos:
-                        if self._to_display_name(g) in other_groups:
-                            oth_nums |= GRUPOS_MAESTROS[g]
-                    type_nums.append(oth_nums)
-                
-                # Intersection of all types
-                if type_nums:
-                    intersection = type_nums[0]
-                    for nums_set in type_nums[1:]:
-                        intersection &= nums_set
-                else:
-                    intersection = set()
+                # Use _compute_intersection() which correctly handles type-aware grouping:
+                # - Sectors (Z0, ZG, ZP, H) are unioned within type
+                # - Thirds (T1, T2, T3) are unioned within type  
+                # - Waves (W1, W2, W3) are unioned within type
+                # - Then all types are intersected together
+                intersection = self._compute_intersection()
                 
                 num_chips = len(intersection) if intersection else 1
                 total = self.val_fin * num_chips * multi_in
