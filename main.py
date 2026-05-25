@@ -2023,20 +2023,11 @@ class LinupApp:
 
                 # Y-axis labels with % symbol (positioned to the left)
                 # Top label (max%)
-                shapes.append(cv.Text(
-                    x=5, y=12,
-                    value=f"{max_ret:.1f}%"
-                ))
+                shapes.append(_cv_text(5, 12, f"{max_ret:.1f}%"))
                 # Center label (0%)
-                shapes.append(cv.Text(
-                    x=10, y=center_y - 4,
-                    value="0%"
-                ))
+                shapes.append(_cv_text(10, center_y - 4, "0%"))
                 # Bottom label (min%)
-                shapes.append(cv.Text(
-                    x=5, y=10 + bar_height - 8,
-                    value=f"{min_ret:.1f}%"
-                ))
+                shapes.append(_cv_text(5, 10 + bar_height - 8, f"{min_ret:.1f}%"))
 
                 # Bars - positive go up, negative go down from center
                 n_bars = min(len(return_pcts), 20)  # Limit to 20 bars for visibility
