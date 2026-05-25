@@ -113,7 +113,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v17.2.1"
+        self.page.title      = "Linup v17.3"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -519,7 +519,7 @@ class LinupApp:
                         ft.Text("Linup", color='#3498db', size=64,
                                 weight=ft.FontWeight.BOLD),
                         ft.Container(height=8),
-                        ft.Text("v17.2.1", color='#7f8c8d', size=18),
+                        ft.Text("v17.3", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -1475,25 +1475,25 @@ class LinupApp:
         for sid, snum, date_str, mesa, bs, be, prof, prof_pct in sessions:
             date_field = ft.TextField(
                 value=date_str,
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
-                width=100,
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=32,
+                width=75, size=10,
                 tooltip="Format: yy.mm.dd or dd/mm hh:mm",
             )
-            mesa_label = ft.Text(mesa, color=ft.Colors.WHITE, width=80)
+            mesa_label = ft.Text(mesa, color=ft.Colors.WHITE, width=50, size=10)
             bs_field = ft.TextField(
                 value=str(round(bs, 2)),
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
-                keyboard_type=ft.KeyboardType.NUMBER, width=80,
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=32,
+                keyboard_type=ft.KeyboardType.NUMBER, width=55, size=10,
             )
             be_field = ft.TextField(
                 value=str(round(be, 2)),
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
-                keyboard_type=ft.KeyboardType.NUMBER, width=80,
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=32,
+                keyboard_type=ft.KeyboardType.NUMBER, width=55, size=10,
             )
             profit_field = ft.TextField(
                 value=str(round(prof, 2)),
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
-                keyboard_type=ft.KeyboardType.NUMBER, width=80,
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=32,
+                keyboard_type=ft.KeyboardType.NUMBER, width=55, size=10,
                 read_only=True,
             )
             
@@ -1543,19 +1543,19 @@ class LinupApp:
 
             delete_btn = ft.ElevatedButton(
                 "✕", on_click=make_delete_handler(sid, len(session_rows_ui)),
-                height=40, width=40,
+                height=32, width=32,
                 style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE),
             )
             
             row = ft.Row(controls=[
-                ft.Text(str(snum), color=ft.Colors.WHITE, width=40),
+                ft.Text(str(snum), color=ft.Colors.WHITE, width=35, size=10),
                 date_field,
                 mesa_label,
                 bs_field,
                 be_field,
                 profit_field,
                 delete_btn,
-            ], spacing=3, tight=True)
+            ], spacing=2, tight=True)
             session_rows_ui.append(row)
 
         def on_save_all(ev):
@@ -1612,14 +1612,14 @@ class LinupApp:
 
         # Header row
         header = ft.Row(controls=[
-            ft.Text("#", color='#7f8c8d', width=40, weight=ft.FontWeight.BOLD),
-            ft.Text("DATE", color='#7f8c8d', width=100, weight=ft.FontWeight.BOLD),
-            ft.Text("TABLE", color='#7f8c8d', width=80, weight=ft.FontWeight.BOLD),
-            ft.Text("START $", color='#7f8c8d', width=80, weight=ft.FontWeight.BOLD),
-            ft.Text("END $", color='#7f8c8d', width=80, weight=ft.FontWeight.BOLD),
-            ft.Text("PROFIT", color='#7f8c8d', width=80, weight=ft.FontWeight.BOLD),
-            ft.Text("", color='#7f8c8d', width=40, weight=ft.FontWeight.BOLD),
-        ], spacing=3, tight=True)
+            ft.Text("#", color='#7f8c8d', width=35, weight=ft.FontWeight.BOLD, size=9),
+            ft.Text("DATE", color='#7f8c8d', width=75, weight=ft.FontWeight.BOLD, size=9),
+            ft.Text("TABLE", color='#7f8c8d', width=50, weight=ft.FontWeight.BOLD, size=9),
+            ft.Text("START $", color='#7f8c8d', width=55, weight=ft.FontWeight.BOLD, size=9),
+            ft.Text("END $", color='#7f8c8d', width=55, weight=ft.FontWeight.BOLD, size=9),
+            ft.Text("PROFIT", color='#7f8c8d', width=55, weight=ft.FontWeight.BOLD, size=9),
+            ft.Text("", color='#7f8c8d', width=32, weight=ft.FontWeight.BOLD, size=9),
+        ], spacing=2, tight=True)
 
         self._set_view(
             ft.Container(
