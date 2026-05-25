@@ -4531,8 +4531,8 @@ class LinupApp:
                 if g in GRUPOS_MAESTROS:
                     all_nums |= GRUPOS_MAESTROS[g]
             safety_levels = self._compute_safety_levels()
-            total_chips = sum(safety_levels.values())  # Sum of all safety levels
-            max_safety = max(safety_levels.values()) if safety_levels else 0
+            total_chips = sum(v for v in safety_levels.values() if v > 0)  # Sum of covered numbers only
+            max_safety = max((v for v in safety_levels.values() if v > 0), default=0)
         
         # Calculate total cost based on total chips
         total_cost = total_chips * chip_per_num
