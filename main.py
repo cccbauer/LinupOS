@@ -5159,13 +5159,14 @@ class LinupApp:
                 # Inside bets: show chip breakdown
                 chip_val  = self.val_fin
                 # Sniper mode: use intersection size; regular mode: use safety level sum
+                # NOTE: num_chips is the actual chip count, multiplier is already in total cost
                 if self.sniper_mode:
                     intersection = self._compute_intersection()
-                    num_chips = len(intersection) * multi
+                    num_chips = len(intersection)
                 else:
                     # Use sum of safety levels (total chips wagered)
                     safety_levels = self._compute_safety_levels()
-                    num_chips = sum(safety_levels.values()) * multi
+                    num_chips = sum(safety_levels.values())
                 prog_tag = "" if self.prog_on else f" [{multi}x]"
                 self.lbl_inv.value = f"BET: ${total:.2f} ({num_chips}x${chip_val:.4g}){prog_tag}"
         else:
