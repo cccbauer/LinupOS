@@ -1476,24 +1476,24 @@ class LinupApp:
             date_field = ft.TextField(
                 value=date_str,
                 bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=32,
-                width=75, size=10,
+                width=75,
                 tooltip="Format: yy.mm.dd or dd/mm hh:mm",
             )
             mesa_label = ft.Text(mesa, color=ft.Colors.WHITE, width=50, size=10)
             bs_field = ft.TextField(
                 value=str(round(bs, 2)),
                 bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=32,
-                keyboard_type=ft.KeyboardType.NUMBER, width=55, size=10,
+                keyboard_type=ft.KeyboardType.NUMBER, width=55,
             )
             be_field = ft.TextField(
                 value=str(round(be, 2)),
                 bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=32,
-                keyboard_type=ft.KeyboardType.NUMBER, width=55, size=10,
+                keyboard_type=ft.KeyboardType.NUMBER, width=55,
             )
             profit_field = ft.TextField(
                 value=str(round(prof, 2)),
                 bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=32,
-                keyboard_type=ft.KeyboardType.NUMBER, width=55, size=10,
+                keyboard_type=ft.KeyboardType.NUMBER, width=55,
                 read_only=True,
             )
             
