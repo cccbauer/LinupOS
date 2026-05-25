@@ -3829,7 +3829,7 @@ class LinupApp:
     def _compute_bet(self):
         n = len(self.grupos_activos)
         if n == 0:
-            return 0.0, 0.0
+            return 0.0, 0.0, 0
 
         # Define outside bet types
         columns = {'34', '35', '36'}
