@@ -2026,21 +2026,21 @@ class LinupApp:
                 # Top label (max%)
                 shapes.append(cv.Text(
                     x=5, y=12,
-                    text=f"{max_ret:.1f}%",
+                    value=f"{max_ret:.1f}%",
                     color=y_label_color,
                     size=9
                 ))
                 # Center label (0%)
                 shapes.append(cv.Text(
                     x=10, y=center_y - 4,
-                    text="0%",
+                    value="0%",
                     color=y_label_color,
                     size=9
                 ))
                 # Bottom label (min%)
                 shapes.append(cv.Text(
                     x=5, y=10 + bar_height - 8,
-                    text=f"{min_ret:.1f}%",
+                    value=f"{min_ret:.1f}%",
                     color=y_label_color,
                     size=9
                 ))
