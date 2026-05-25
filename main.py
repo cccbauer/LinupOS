@@ -3838,13 +3838,8 @@ class LinupApp:
         inside_grps = [g for g in active_display if g in inside_types]
         other_groups = [g for g in active_display if g not in outside_types and g not in inside_types]
         
-        # If ANY Z/T/W groups present, treat as inside bet (not simple outside)
-        if inside_grps:
-            # This is an inside bet - skip the simple outside logic below
-            pass
-        
-        # Count how many types are represented
-        types_used = sum([1 for x in [col_groups, doc_groups, flt_groups, other_groups] if x])
+        # Count how many types are represented (include inside groups in type count)
+        types_used = sum([1 for x in [col_groups, doc_groups, flt_groups, inside_grps, other_groups] if x])
         
         total = 0.0
         win_payout = 0.0
@@ -3890,6 +3885,13 @@ class LinupApp:
                         if self._to_display_name(g) in filters:
                             flt_nums |= GRUPOS_MAESTROS[g]
                     type_nums.append(flt_nums)
+                
+                if inside_grps:
+                    ins_nums = set()
+                    for g in self.grupos_activos:
+                        if self._to_display_name(g) in inside_types:
+                            ins_nums |= GRUPOS_MAESTROS[g]
+                    type_nums.append(ins_nums)
                 
                 if other_groups:
                     oth_nums = set()
