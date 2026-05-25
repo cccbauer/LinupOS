@@ -1475,24 +1475,24 @@ class LinupApp:
         for sid, snum, date_str, mesa, bs, be, prof, prof_pct in sessions:
             date_field = ft.TextField(
                 value=date_str,
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=32,
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=36,
                 width=75,
                 tooltip="Format: yy.mm.dd or dd/mm hh:mm",
             )
             mesa_label = ft.Text(mesa, color=ft.Colors.WHITE, width=50, size=10)
             bs_field = ft.TextField(
                 value=str(round(bs, 2)),
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=32,
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=36,
                 keyboard_type=ft.KeyboardType.NUMBER, width=55,
             )
             be_field = ft.TextField(
                 value=str(round(be, 2)),
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=32,
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=36,
                 keyboard_type=ft.KeyboardType.NUMBER, width=55,
             )
             profit_field = ft.TextField(
                 value=str(round(prof, 2)),
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=32,
+                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=36,
                 keyboard_type=ft.KeyboardType.NUMBER, width=55,
                 read_only=True,
             )
@@ -1543,7 +1543,7 @@ class LinupApp:
 
             delete_btn = ft.ElevatedButton(
                 "✕", on_click=make_delete_handler(sid, len(session_rows_ui)),
-                height=32, width=32,
+                height=36, width=36,
                 style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE),
             )
             
