@@ -3851,6 +3851,7 @@ class LinupApp:
         
         total = 0.0
         win_payout = 0.0
+        num_chips = 0
         
         # Simple outside bet: single type with max 2 groups, NO Z/T/W (inside types)
         is_simple_outside = (types_used == 1 and n <= 2 and not inside_grps)
@@ -3858,6 +3859,7 @@ class LinupApp:
         if is_simple_outside:
             multi_out = self._current_multi(is_out=True)
             n_out = len(self.grupos_activos)
+            num_chips = n_out  # For outside bets, num_chips = number of groups
             if n_out == 1:
                 total = self.val_fout * multi_out
                 win_payout = total * 3
