@@ -3766,7 +3766,8 @@ class LinupApp:
         """Check if current selection is a simple outside bet (single type, 1-2 groups).
         Simple outside bets: 1-2 dozens, 1-2 columns, 1-2 filters.
         Returns True for: 1a, 2a, 34+35, R, Even+Odd, etc.
-        Returns False for: mixed types like 1a+34, or 3+ same type.
+        Returns False for: mixed types like 1a+34, 3+ same type, or any Z/T/W (sectors/thirds/wave).
+        Z, T, W are treated as inside bets (intersection mode).
         """
         if not self.grupos_activos:
             return False
@@ -3776,15 +3777,21 @@ class LinupApp:
         dozens = {'1a', '2a', '3a'}
         filters = {'R', 'B', 'Even', 'Odd', '1-18', '19-36'}
         outside_types = columns | dozens | filters
+        inside_types = {'Z0', 'ZG', 'ZP', 'H', 'T1', 'T2', 'T3', 'W1', 'W2', 'W3'}  # Always inside bets
         
         # Categorize active groups (use display names to handle live variants)
         active_display = [self._to_display_name(g) for g in self.grupos_activos]
         col_groups = [g for g in active_display if g in columns]
         doc_groups = [g for g in active_display if g in dozens]
         flt_groups = [g for g in active_display if g in filters]
-        other_groups = [g for g in active_display if g not in outside_types]
+        inside_grps = [g for g in active_display if g in inside_types]
+        other_groups = [g for g in active_display if g not in outside_types and g not in inside_types]
         
-        # Count how many types are represented
+        # If ANY Z/T/W groups present, treat as inside bet
+        if inside_grps:
+            return False
+        
+        # Count how many outside types are represented
         types_used = sum([1 for x in [col_groups, doc_groups, flt_groups, other_groups] if x])
         
         # Simple outside: only ONE type, and max 2 groups of that type
