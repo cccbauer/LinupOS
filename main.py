@@ -3912,6 +3912,8 @@ class LinupApp:
                 # But total cost = num_chips × val_fin × multi
                 total = self.val_fin * num_chips * multi_in
                 win_payout = self.val_fin * 36 * multi_in
+                # DEBUG
+                print(f"DEBUG _compute_bet (inside, sniper OFF): num_chips={num_chips}, val_fin={self.val_fin}, multi_in={multi_in}, total={total}")
         
         return total, win_payout
 
@@ -5168,6 +5170,10 @@ class LinupApp:
                     safety_levels = self._compute_safety_levels()
                     # Only count numbers that are covered (safety level > 0)
                     num_chips = sum(v for v in safety_levels.values() if v > 0)
+                
+                # DEBUG
+                print(f"DEBUG update_inv_label: grupos={self.grupos_activos}, sniper={self.sniper_mode}, num_chips={num_chips}, chip_val={chip_val}, multi={multi}, total={total}")
+                
                 prog_tag = "" if self.prog_on else f" [{multi}x]"
                 self.lbl_inv.value = f"BET: ${total:.2f} ({num_chips}x${chip_val:.4g}){prog_tag}"
         else:
