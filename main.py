@@ -2022,27 +2022,20 @@ class LinupApp:
                                      paint=ft.Paint(color='#666666', stroke_width=1)))
 
                 # Y-axis labels with % symbol (positioned to the left)
-                y_label_color = '#888888'
                 # Top label (max%)
                 shapes.append(cv.Text(
                     x=5, y=12,
-                    value=f"{max_ret:.1f}%",
-                    color=y_label_color,
-                    size=9
+                    value=f"{max_ret:.1f}%"
                 ))
                 # Center label (0%)
                 shapes.append(cv.Text(
                     x=10, y=center_y - 4,
-                    value="0%",
-                    color=y_label_color,
-                    size=9
+                    value="0%"
                 ))
                 # Bottom label (min%)
                 shapes.append(cv.Text(
                     x=5, y=10 + bar_height - 8,
-                    value=f"{min_ret:.1f}%",
-                    color=y_label_color,
-                    size=9
+                    value=f"{min_ret:.1f}%"
                 ))
 
                 # Bars - positive go up, negative go down from center
