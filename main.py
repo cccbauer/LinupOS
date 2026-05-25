@@ -2021,34 +2021,28 @@ class LinupApp:
                 shapes.append(cv.Line(x1=bar_x_start, y1=center_y, x2=bar_x_start + bar_width, y2=center_y,
                                      paint=ft.Paint(color='#666666', stroke_width=1)))
 
-                # Y-axis labels with % symbol
+                # Y-axis labels with % symbol (positioned to the left)
                 y_label_color = '#888888'
                 # Top label (max%)
                 shapes.append(cv.Text(
-                    x=bar_x_start - 5, y=15,
+                    x=5, y=12,
                     text=f"{max_ret:.1f}%",
                     color=y_label_color,
-                    size=10,
-                    anchor_x=ft.Text.ANCHOR_RIGHT,
-                    anchor_y=ft.Text.ANCHOR_CENTER
+                    size=9
                 ))
                 # Center label (0%)
                 shapes.append(cv.Text(
-                    x=bar_x_start - 5, y=center_y,
+                    x=10, y=center_y - 4,
                     text="0%",
                     color=y_label_color,
-                    size=10,
-                    anchor_x=ft.Text.ANCHOR_RIGHT,
-                    anchor_y=ft.Text.ANCHOR_CENTER
+                    size=9
                 ))
                 # Bottom label (min%)
                 shapes.append(cv.Text(
-                    x=bar_x_start - 5, y=10 + bar_height - 5,
+                    x=5, y=10 + bar_height - 8,
                     text=f"{min_ret:.1f}%",
                     color=y_label_color,
-                    size=10,
-                    anchor_x=ft.Text.ANCHOR_RIGHT,
-                    anchor_y=ft.Text.ANCHOR_CENTER
+                    size=9
                 ))
 
                 # Bars - positive go up, negative go down from center
