@@ -3828,13 +3828,20 @@ class LinupApp:
         dozens = {'1a', '2a', '3a'}
         filters = {'R', 'B', 'Even', 'Odd', '1-18', '19-36'}
         outside_types = columns | dozens | filters
+        inside_types = {'Z0', 'ZG', 'ZP', 'H', 'T1', 'T2', 'T3', 'W1', 'W2', 'W3'}  # Always inside bets
         
         # Categorize active groups (use display names to handle live variants)
         active_display = [self._to_display_name(g) for g in self.grupos_activos]
         col_groups = [g for g in active_display if g in columns]
         doc_groups = [g for g in active_display if g in dozens]
         flt_groups = [g for g in active_display if g in filters]
-        other_groups = [g for g in active_display if g not in outside_types]
+        inside_grps = [g for g in active_display if g in inside_types]
+        other_groups = [g for g in active_display if g not in outside_types and g not in inside_types]
+        
+        # If ANY Z/T/W groups present, treat as inside bet (not simple outside)
+        if inside_grps:
+            # This is an inside bet - skip the simple outside logic below
+            pass
         
         # Count how many types are represented
         types_used = sum([1 for x in [col_groups, doc_groups, flt_groups, other_groups] if x])
@@ -3842,8 +3849,8 @@ class LinupApp:
         total = 0.0
         win_payout = 0.0
         
-        # Simple outside bet: single type with max 2 groups
-        is_simple_outside = types_used == 1 and n <= 2
+        # Simple outside bet: single type with max 2 groups, NO Z/T/W (inside types)
+        is_simple_outside = (types_used == 1 and n <= 2 and not inside_grps)
         
         if is_simple_outside:
             multi_out = self._current_multi(is_out=True)
@@ -3902,6 +3909,8 @@ class LinupApp:
                 num_chips = len(intersection) if intersection else 1
                 total = self.val_fin * num_chips * multi_in
                 win_payout = self.val_fin * 36 * multi_in
+                # DEBUG
+                print(f"DEBUG _compute_bet (inside, sniper ON): grupos={self.grupos_activos}, intersection={len(intersection) if intersection else 0}, num_chips={num_chips}, val_fin={self.val_fin}, multi_in={multi_in}, total={total}")
             else:
                 # Sniper OFF: use sum of safety levels (total chips wagered)
                 safety_levels = self._compute_safety_levels()
