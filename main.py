@@ -767,13 +767,11 @@ class LinupApp:
                     bgcolor='#27ae60', color='#ffffff', height=40,
                     text_align=ft.TextAlign.CENTER, expand=1, read_only=True,
                 )
-                chip_in_loss_val = calc_chip_loss_pct(
-                    str(float(chip_in_val) * 15),  # Total for 15 chips
-                    str(capital_per_table)
-                )
+                chip_in_total = float(chip_in_val) * 15
+                chip_in_loss_pct_val = calc_chip_loss_pct(str(chip_in_total), str(capital_per_table))
                 chip_in_loss_t = ft.Text(
-                    f"{chip_in_loss_val}% loss",
-                    color='#27ae60', size=10,
+                    f"{chip_in_loss_pct_val}% of Capital  |  ${chip_in_total:.2f} per progression (15 chips × 1x,2x,3x)",
+                    color='#27ae60', size=9,
                 )
                 
                 # Chip Out field and loss display
@@ -783,13 +781,11 @@ class LinupApp:
                     bgcolor='#f39c12', color='#ffffff', height=40,
                     text_align=ft.TextAlign.CENTER, expand=1, read_only=True,
                 )
-                chip_out_loss_val = calc_chip_loss_pct(
-                    str(float(chip_out_val) * 3),  # 3 losses on progression
-                    str(capital_per_table)
-                )
+                chip_out_total = float(chip_out_val) * 3
+                chip_out_loss_pct_val = calc_chip_loss_pct(str(chip_out_total), str(capital_per_table))
                 chip_out_loss_t = ft.Text(
-                    f"{chip_out_loss_val}% loss",
-                    color='#f39c12', size=10,
+                    f"{chip_out_loss_pct_val}% of Capital  |  ${chip_out_total:.2f} max loss (3 progression steps)",
+                    color='#f39c12', size=9,
                 )
                 
                 name_fields.append(nf)
@@ -801,13 +797,17 @@ class LinupApp:
                     def on_change(_=None):
                         new_chip_in = calc_chip_in(bank_f.value, max_loss_f.value)
                         new_chip_out = calc_chip_out(bank_f.value)
-                        chip_in_loss = calc_chip_loss_pct(str(float(new_chip_in) * 15), str(capital_per_table))
-                        chip_out_loss = calc_chip_loss_pct(str(float(new_chip_out) * 3), str(capital_per_table))
+                        
+                        chip_in_total = float(new_chip_in) * 15
+                        chip_in_loss_pct = calc_chip_loss_pct(str(chip_in_total), str(capital_per_table))
+                        
+                        chip_out_total = float(new_chip_out) * 3
+                        chip_out_loss_pct = calc_chip_loss_pct(str(chip_out_total), str(capital_per_table))
                         
                         chip_in_field.value = new_chip_in
-                        chip_in_loss_text.value = f"{chip_in_loss}% loss"
+                        chip_in_loss_text.value = f"{chip_in_loss_pct}% of Capital  |  ${chip_in_total:.2f} per progression (15 chips × 1x,2x,3x)"
                         chip_out_field.value = new_chip_out
-                        chip_out_loss_text.value = f"{chip_out_loss}% loss"
+                        chip_out_loss_text.value = f"{chip_out_loss_pct}% of Capital  |  ${chip_out_total:.2f} max loss (3 progression steps)"
                         
                         try:
                             chip_in_field.update()
