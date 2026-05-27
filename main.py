@@ -113,7 +113,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v17.3"
+        self.page.title      = "Linup v18.0.0"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -701,25 +701,145 @@ class LinupApp:
         # ── FIAT MODE ──────────────────────────────────────────────
         if inv_type == 'FIAT':
             bank_per_table = round(capital * 0.03, 2)
-            name_fields, bank_fields, rows = [], [], []
+            capital_per_table = round(capital / num_tables, 2)
+            default_max_loss_pct = 1.5  # Default: 1.5% of capital
+            
+            name_fields, bank_fields, max_loss_fields = [], [], []
+            rows = []
+            
+            # Helper functions for calculations
+            def calc_chip_in(bank_val, max_loss_pct_val):
+                """Calculate chip-in: (bank * max_loss_pct / 100) / 15"""
+                try:
+                    bank = float(bank_val or bank_per_table)
+                    max_loss_pct = float(max_loss_pct_val or default_max_loss_pct)
+                    if bank <= 0 or max_loss_pct <= 0:
+                        return "0.00"
+                    chip_in = (bank * max_loss_pct / 100) / 15
+                    return f"{chip_in:.4f}"
+                except Exception:
+                    return "0.00"
+            
+            def calc_chip_out(bank_val):
+                """Calculate chip-out: bank / 15"""
+                try:
+                    bank = float(bank_val or bank_per_table)
+                    if bank <= 0:
+                        return "0.00"
+                    chip_out = bank / 15
+                    return f"{chip_out:.4f}"
+                except Exception:
+                    return "0.00"
+            
+            def calc_chip_loss_pct(chip_val, capital_val):
+                """Calculate what % of capital this chip represents"""
+                try:
+                    chip = float(chip_val or 0)
+                    cap = float(capital_val or 1)
+                    if cap <= 0:
+                        return "0.00"
+                    loss_pct = (chip / cap) * 100
+                    return f"{loss_pct:.2f}"
+                except Exception:
+                    return "0.00"
+            
             for i in range(num_tables):
                 nf = ft.TextField(
                     value=f"TABLE {i + 1}",
-                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
                     expand=2,
                 )
                 bf = ft.TextField(
                     value=str(bank_per_table),
-                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
                     keyboard_type=ft.KeyboardType.NUMBER, expand=1,
                 )
+                mlf = ft.TextField(
+                    value=str(default_max_loss_pct),
+                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
+                    keyboard_type=ft.KeyboardType.NUMBER, expand=1,
+                )
+                
+                # Chip In field and loss display
+                chip_in_val = calc_chip_in(str(bank_per_table), str(default_max_loss_pct))
+                chip_in_f = ft.TextField(
+                    value=chip_in_val,
+                    bgcolor='#27ae60', color='#ffffff', height=40,
+                    text_align=ft.TextAlign.CENTER, expand=1, read_only=True,
+                )
+                chip_in_loss_val = calc_chip_loss_pct(
+                    str(float(chip_in_val) * 15),  # Total for 15 chips
+                    str(capital_per_table)
+                )
+                chip_in_loss_t = ft.Text(
+                    f"{chip_in_loss_val}% loss",
+                    color='#27ae60', size=10,
+                )
+                
+                # Chip Out field and loss display
+                chip_out_val = calc_chip_out(str(bank_per_table))
+                chip_out_f = ft.TextField(
+                    value=chip_out_val,
+                    bgcolor='#f39c12', color='#ffffff', height=40,
+                    text_align=ft.TextAlign.CENTER, expand=1, read_only=True,
+                )
+                chip_out_loss_val = calc_chip_loss_pct(
+                    str(float(chip_out_val) * 3),  # 3 losses on progression
+                    str(capital_per_table)
+                )
+                chip_out_loss_t = ft.Text(
+                    f"{chip_out_loss_val}% loss",
+                    color='#f39c12', size=10,
+                )
+                
                 name_fields.append(nf)
                 bank_fields.append(bf)
-                rows.append(ft.Row(controls=[nf, bf], spacing=6))
+                max_loss_fields.append(mlf)
+                
+                # Create handler for field updates
+                def make_update_handler(bank_f, max_loss_f, chip_in_field, chip_in_loss_text, chip_out_field, chip_out_loss_text):
+                    def on_change(_=None):
+                        new_chip_in = calc_chip_in(bank_f.value, max_loss_f.value)
+                        new_chip_out = calc_chip_out(bank_f.value)
+                        chip_in_loss = calc_chip_loss_pct(str(float(new_chip_in) * 15), str(capital_per_table))
+                        chip_out_loss = calc_chip_loss_pct(str(float(new_chip_out) * 3), str(capital_per_table))
+                        
+                        chip_in_field.value = new_chip_in
+                        chip_in_loss_text.value = f"{chip_in_loss}% loss"
+                        chip_out_field.value = new_chip_out
+                        chip_out_loss_text.value = f"{chip_out_loss}% loss"
+                        
+                        try:
+                            chip_in_field.update()
+                            chip_in_loss_text.update()
+                            chip_out_field.update()
+                            chip_out_loss_text.update()
+                        except Exception:
+                            pass
+                    return on_change
+                
+                bf.on_change = make_update_handler(bf, mlf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t)
+                mlf.on_change = make_update_handler(bf, mlf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t)
+                
+                rows.append(ft.Container(
+                    bgcolor='#222222', border_radius=8, padding=10,
+                    margin=ft.margin.only(bottom=8),
+                    content=ft.Column(spacing=6, controls=[
+                        ft.Text(f"TABLE {i + 1}", color='#7f8c8d', size=11),
+                        ft.Row(controls=[ft.Text("TABLE:", color='#7f8c8d', width=80), nf], spacing=6),
+                        ft.Row(controls=[ft.Text("BANK:", color='#7f8c8d', width=80), bf], spacing=6),
+                        ft.Row(controls=[ft.Text("MAX LOSS %:", color='#7f8c8d', width=80), mlf], spacing=6),
+                        ft.Divider(color='#444444', height=1),
+                        ft.Row(controls=[ft.Text("CHIP IN:", color='#27ae60', width=80), chip_in_f], spacing=6),
+                        chip_in_loss_t,
+                        ft.Row(controls=[ft.Text("CHIP OUT:", color='#f39c12', width=80), chip_out_f], spacing=6),
+                        chip_out_loss_t,
+                    ]),
+                ))
 
             def on_create_fiat(_):
                 tables_data = []
-                for nf, bf in zip(name_fields, bank_fields):
+                for nf, bf, mlf in zip(name_fields, bank_fields, max_loss_fields):
                     t_name = nf.value.strip().upper() or f"TABLE {len(tables_data) + 1}"
                     try:
                         t_bank = float(bf.value or bank_per_table)
@@ -737,11 +857,9 @@ class LinupApp:
                 ft.Text(f"{inv_name}  |  Capital: ${capital:.2f}", color='#3498db',
                         size=16, weight=ft.FontWeight.BOLD),
                 ft.Container(height=4),
-                ft.Row(controls=[
-                    ft.Text("TABLE NAME", color='#7f8c8d', size=12, expand=2),
-                    ft.Text("BANK ($)", color='#7f8c8d', size=12, expand=1),
-                ]),
-                ft.Container(height=4),
+                ft.Text("Bank: Working capital per table  |  Max Loss %: Risk tolerance",
+                        color='#95a5a6', size=10),
+                ft.Container(height=8),
             ] + rows + [
                 ft.Container(height=20),
                 ft.ElevatedButton(
