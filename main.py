@@ -748,16 +748,19 @@ class LinupApp:
                     value=f"TABLE {i + 1}",
                     bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
                     expand=2,
+                    text_size=14,
                 )
                 bf = ft.TextField(
                     value=str(bank_per_table),
                     bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
                     keyboard_type=ft.KeyboardType.NUMBER, expand=1,
+                    text_size=14,
                 )
                 mlf = ft.TextField(
                     value=str(default_max_loss_pct),
                     bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
                     keyboard_type=ft.KeyboardType.NUMBER, expand=1,
+                    text_size=14,
                 )
                 
                 # Chip In field and loss display
@@ -766,12 +769,13 @@ class LinupApp:
                     value=chip_in_val,
                     bgcolor='#27ae60', color='#ffffff', height=40,
                     text_align=ft.TextAlign.CENTER, expand=1, read_only=True,
+                    text_size=14,
                 )
                 chip_in_total = float(chip_in_val) * 15
                 chip_in_loss_pct_val = calc_chip_loss_pct(str(chip_in_total), str(capital_per_table))
                 chip_in_loss_t = ft.Text(
                     f"{chip_in_loss_pct_val}% of Capital  |  ${chip_in_total:.2f} per progression (15 chips × 1x,2x,3x)",
-                    color='#27ae60', size=9,
+                    color='#27ae60', size=12,
                 )
                 
                 # Chip Out field and loss display
@@ -780,12 +784,13 @@ class LinupApp:
                     value=chip_out_val,
                     bgcolor='#f39c12', color='#ffffff', height=40,
                     text_align=ft.TextAlign.CENTER, expand=1, read_only=True,
+                    text_size=14,
                 )
                 chip_out_total = float(chip_out_val) * 3
                 chip_out_loss_pct_val = calc_chip_loss_pct(str(chip_out_total), str(capital_per_table))
                 chip_out_loss_t = ft.Text(
                     f"{chip_out_loss_pct_val}% of Capital  |  ${chip_out_total:.2f} max loss (3 progression steps)",
-                    color='#f39c12', size=9,
+                    color='#f39c12', size=12,
                 )
                 
                 name_fields.append(nf)
@@ -826,18 +831,19 @@ class LinupApp:
                     margin=ft.margin.only(bottom=8),
                     content=ft.Column(spacing=6, controls=[
                         ft.Text(f"TABLE {i + 1}", color='#7f8c8d', size=11),
-                        ft.Row(controls=[ft.Text("CAPITAL:", color='#7f8c8d', width=80), ft.TextField(
+                        ft.Row(controls=[ft.Text("CAPITAL:", color='#7f8c8d', width=80, size=12), ft.TextField(
                             value=f"${capital_per_table:.2f}",
                             bgcolor='#555555', color=ft.Colors.WHITE, height=40,
                             text_align=ft.TextAlign.CENTER, expand=1, read_only=True,
+                            text_size=14,
                         )], spacing=6),
-                        ft.Row(controls=[ft.Text("TABLE:", color='#7f8c8d', width=80), nf], spacing=6),
-                        ft.Row(controls=[ft.Text("BANK:", color='#7f8c8d', width=80), bf], spacing=6),
-                        ft.Row(controls=[ft.Text("MAX LOSS %:", color='#7f8c8d', width=80), mlf], spacing=6),
+                        ft.Row(controls=[ft.Text("TABLE:", color='#7f8c8d', width=80, size=12), nf], spacing=6),
+                        ft.Row(controls=[ft.Text("BANK:", color='#7f8c8d', width=80, size=12), bf], spacing=6),
+                        ft.Row(controls=[ft.Text("MAX LOSS %:", color='#7f8c8d', width=80, size=12), mlf], spacing=6),
                         ft.Divider(color='#444444', height=1),
-                        ft.Row(controls=[ft.Text("CHIP IN:", color='#27ae60', width=80), chip_in_f], spacing=6),
+                        ft.Row(controls=[ft.Text("CHIP IN:", color='#27ae60', width=80, size=12), chip_in_f], spacing=6),
                         chip_in_loss_t,
-                        ft.Row(controls=[ft.Text("CHIP OUT:", color='#f39c12', width=80), chip_out_f], spacing=6),
+                        ft.Row(controls=[ft.Text("CHIP OUT:", color='#f39c12', width=80, size=12), chip_out_f], spacing=6),
                         chip_out_loss_t,
                     ]),
                 ))
