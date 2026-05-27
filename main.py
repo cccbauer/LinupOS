@@ -826,6 +826,11 @@ class LinupApp:
                     margin=ft.margin.only(bottom=8),
                     content=ft.Column(spacing=6, controls=[
                         ft.Text(f"TABLE {i + 1}", color='#7f8c8d', size=11),
+                        ft.Row(controls=[ft.Text("CAPITAL:", color='#7f8c8d', width=80), ft.TextField(
+                            value=f"${capital_per_table:.2f}",
+                            bgcolor='#555555', color=ft.Colors.WHITE, height=40,
+                            text_align=ft.TextAlign.CENTER, expand=1, read_only=True,
+                        )], spacing=6),
                         ft.Row(controls=[ft.Text("TABLE:", color='#7f8c8d', width=80), nf], spacing=6),
                         ft.Row(controls=[ft.Text("BANK:", color='#7f8c8d', width=80), bf], spacing=6),
                         ft.Row(controls=[ft.Text("MAX LOSS %:", color='#7f8c8d', width=80), mlf], spacing=6),
