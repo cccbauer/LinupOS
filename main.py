@@ -2940,14 +2940,16 @@ class LinupApp:
             return b * 15 * 1 + b * 15 * 2 + b * 15 * 3
 
         def _recalc_fin(e=None):
-            """Recalculate CHIP IN based on base chip"""
+            """Recalculate CHIP IN (same pattern as CHIP OUT)"""
             try:
                 bk = _f(self.banca_input.value)
                 base = _f(self.fin_base_input.value)
                 
                 total = _chips_from_progression(base)
-                self.fin_input.value = str(total)
+                fin_val = _round_up_chip(total)
+                self.fin_input.value = str(fin_val)
                 self.fin_input.update()
+                
                 _refresh_labels(bk, base, _f(self.fout_input.value))
             except Exception:
                 pass
