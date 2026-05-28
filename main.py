@@ -776,6 +776,9 @@ class LinupApp:
                 except Exception:
                     return 0.0, 0.0, "", ""
             
+            # Store table fields as instance variables for easy access in handlers
+            self.table_setup_fields = []  # list of {nf, bf, mlf, mcf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t}
+            
             for i in range(num_tables):
                 nf = ft.TextField(
                     value=f"TABLE {i + 1}",
@@ -796,7 +799,6 @@ class LinupApp:
                     text_size=14,
                 )
                 
-                # Min Chip Value field
                 mcf = ft.TextField(
                     value="0.05",
                     bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
@@ -804,12 +806,9 @@ class LinupApp:
                     text_size=14,
                 )
 
-                
-                # Chip In and Out values from MAX LOSS %
                 chip_in_val = calc_chip_in(str(capital_per_table), str(default_max_loss_pct))
                 chip_out_val = calc_chip_out(str(capital_per_table), str(default_max_loss_pct))
                 
-                # Chip In field and loss display
                 chip_in_f = ft.TextField(
                     value=chip_in_val,
                     bgcolor='#27ae60', color='#ffffff', height=40,
@@ -828,7 +827,6 @@ class LinupApp:
                     color='#27ae60', size=12,
                 )
                 
-                # Chip Out field and loss display
                 chip_out_val = calc_chip_out(str(capital_per_table), str(default_max_loss_pct))
                 chip_out_f = ft.TextField(
                     value=chip_out_val,
@@ -837,7 +835,7 @@ class LinupApp:
                     text_size=14,
                 )
                 chip_out_float = float(chip_out_val)
-                chip_out_1x = chip_out_float * 2 * 1  # 2 dozens/lines
+                chip_out_1x = chip_out_float * 2 * 1
                 chip_out_3x = chip_out_float * 2 * 3
                 chip_out_5x = chip_out_float * 2 * 5
                 chip_out_total = chip_out_1x + chip_out_3x + chip_out_5x
@@ -852,20 +850,27 @@ class LinupApp:
                 bank_fields.append(bf)
                 max_loss_fields.append(mlf)
                 
-                # Attach handlers using closure-safe default arguments
-                def attach_handlers(bf_ref, mlf_ref, chip_in_f_ref, chip_in_loss_t_ref, chip_out_f_ref, chip_out_loss_t_ref):
-                    def on_change_handler(e=None):
-                        # Get current bank value from field
+                # Store all fields for this table
+                table_idx = i
+                table_fields_dict = {
+                    'nf': nf, 'bf': bf, 'mlf': mlf, 'mcf': mcf,
+                    'chip_in_f': chip_in_f, 'chip_in_loss_t': chip_in_loss_t,
+                    'chip_out_f': chip_out_f, 'chip_out_loss_t': chip_out_loss_t
+                }
+                self.table_setup_fields.append(table_fields_dict)
+                
+                # Create handler factory with table index
+                def make_handler(tbl_idx):
+                    def on_change(e=None):
+                        tfd = self.table_setup_fields[tbl_idx]
                         try:
-                            bank_val = float(bf_ref.value or bank_per_table)
+                            bank_val = float(tfd['bf'].value or bank_per_table)
                         except:
                             bank_val = bank_per_table
                         
-                        # Calculate both chip values from the max loss %
-                        new_chip_in = calc_chip_in(str(capital_per_table), mlf_ref.value)
-                        new_chip_out = calc_chip_out(str(capital_per_table), mlf_ref.value)
+                        new_chip_in = calc_chip_in(str(capital_per_table), tfd['mlf'].value)
+                        new_chip_out = calc_chip_out(str(capital_per_table), tfd['mlf'].value)
                         
-                        # Update CHIP IN
                         chip_in_float = float(new_chip_in)
                         chip_in_1x = chip_in_float * 15 * 1
                         chip_in_2x = chip_in_float * 15 * 2
@@ -873,7 +878,6 @@ class LinupApp:
                         chip_in_total = chip_in_1x + chip_in_2x + chip_in_3x
                         chip_in_loss_pct = calc_chip_loss_pct(str(chip_in_total), str(capital_per_table))
                         
-                        # Update CHIP OUT
                         chip_out_float = float(new_chip_out)
                         chip_out_1x = chip_out_float * 2 * 1
                         chip_out_3x = chip_out_float * 2 * 3
@@ -882,19 +886,21 @@ class LinupApp:
                         chip_out_loss_pct = calc_chip_loss_pct(str(chip_out_total), str(capital_per_table))
                         
                         chip_in_bank_pct = (chip_in_total / bank_val * 100) if bank_val > 0 else 0.0
-                        chip_in_f_ref.value = new_chip_in
-                        chip_in_loss_t_ref.value = f"{chip_in_loss_pct}% of Capital ({chip_in_bank_pct:.2f}% of Bank)  |  1x(${chip_in_1x:.2f}) + 2x(${chip_in_2x:.2f}) + 3x(${chip_in_3x:.2f}) = ${chip_in_total:.2f}"
+                        tfd['chip_in_f'].value = new_chip_in
+                        tfd['chip_in_loss_t'].value = f"{chip_in_loss_pct}% of Capital ({chip_in_bank_pct:.2f}% of Bank)  |  1x(${chip_in_1x:.2f}) + 2x(${chip_in_2x:.2f}) + 3x(${chip_in_3x:.2f}) = ${chip_in_total:.2f}"
+                        tfd['chip_in_f'].update()
+                        tfd['chip_in_loss_t'].update()
                         
                         chip_out_bank_pct = (chip_out_total / bank_val * 100) if bank_val > 0 else 0.0
-                        chip_out_f_ref.value = new_chip_out
-                        chip_out_loss_t_ref.value = f"{chip_out_loss_pct}% of Capital ({chip_out_bank_pct:.2f}% of Bank)  |  1x(${chip_out_1x:.2f}) + 3x(${chip_out_3x:.2f}) + 5x(${chip_out_5x:.2f}) = ${chip_out_total:.2f}"
-                        
-                        self.page.update()
+                        tfd['chip_out_f'].value = new_chip_out
+                        tfd['chip_out_loss_t'].value = f"{chip_out_loss_pct}% of Capital ({chip_out_bank_pct:.2f}% of Bank)  |  1x(${chip_out_1x:.2f}) + 3x(${chip_out_3x:.2f}) + 5x(${chip_out_5x:.2f}) = ${chip_out_total:.2f}"
+                        tfd['chip_out_f'].update()
+                        tfd['chip_out_loss_t'].update()
                     
-                    bf_ref.on_change = on_change_handler
-                    mlf_ref.on_change = on_change_handler
+                    return on_change
                 
-                attach_handlers(bf, mlf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t)
+                bf.on_change = make_handler(table_idx)
+                mlf.on_change = make_handler(table_idx)
                 
                 rows.append(ft.Container(
                     bgcolor='#222222', border_radius=8, padding=10,
