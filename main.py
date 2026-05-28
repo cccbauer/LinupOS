@@ -3126,6 +3126,12 @@ class LinupApp:
                         ft.Container(height=10),
                         ft.Text("TABLE:", color=ft.Colors.WHITE),
                         self.table_input,
+                        ft.Text("CAPITAL:", color=ft.Colors.WHITE),
+                        ft.TextField(
+                            value=f"${self.inv_capital:.2f}" if hasattr(self, 'inv_capital') else "$0.00",
+                            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+                            read_only=True,
+                        ),
                         ft.Text("BANK:", color=ft.Colors.WHITE),
                         self.banca_input,
                         ft.Text("MAX LOSS %:", color=ft.Colors.WHITE),
