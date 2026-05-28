@@ -2899,16 +2899,14 @@ class LinupApp:
             # 15 chips at each level
             return b * 15 * p1 + b * 15 * p2 + b * 15 * p3
 
-        def _chip_label_text_prog(base_chip, prog_1x, prog_2x, prog_3x, bank, max_loss_pct):
-            """Generate label for CHIP IN with progression breakdown."""
+        def _chip_label_text_prog(base_chip, bank, max_loss_pct):
+            """Generate label for CHIP IN with fixed progression (1, 2, 3)."""
             try:
                 b = _f(base_chip)
-                p1 = _f(prog_1x)
-                p2 = _f(prog_2x)
-                p3 = _f(prog_3x)
-                total_1x = b * 15 * p1
-                total_2x = b * 15 * p2
-                total_3x = b * 15 * p3
+                # Fixed progression: 1x, 2x, 3x
+                total_1x = b * 15 * 1
+                total_2x = b * 15 * 2
+                total_3x = b * 15 * 3
                 total = total_1x + total_2x + total_3x
                 pct = (total / bank * 100) if bank > 0 else 0
                 return (f"({pct:.4f}% bank · 1x({total_1x:.2f}) + 2x({total_2x:.2f}) + 3x({total_3x:.2f}) = ${total:.2f})")
@@ -2927,7 +2925,7 @@ class LinupApp:
                 return ""
 
         self.fin_label  = ft.Text(
-            f"CHIP IN {_chip_label_text_prog(sug_base_chip, '1', '2', '3', sug_bank, sug_max_loss)}:",
+            f"CHIP IN {_chip_label_text_prog(sug_base_chip, sug_bank, sug_max_loss)}:",
             color=ft.Colors.WHITE,
         )
         self.fout_label = ft.Text(
@@ -2935,8 +2933,8 @@ class LinupApp:
             color=ft.Colors.WHITE,
         )
 
-        def _refresh_labels(bank, base_chip_val, prog1, prog2, prog3, fout_val):
-            self.fin_label.value  = f"CHIP IN {_chip_label_text_prog(base_chip_val, prog1, prog2, prog3, bank, _f(self.max_loss_input.value))}:"
+        def _refresh_labels(bank, base_chip_val, fout_val):
+            self.fin_label.value  = f"CHIP IN {_chip_label_text_prog(base_chip_val, bank, _f(self.max_loss_input.value))}:"
             self.fout_label.value = f"CHIP OUT {_chip_label_text(fout_val, bank, 26, _f(self.max_loss_input.value))}:"
             try:
                 self.fin_label.update()
@@ -2944,19 +2942,22 @@ class LinupApp:
             except Exception:
                 pass
 
+        def _chips_from_progression(base_chip):
+            """Calculate CHIP IN total from base chip with fixed progression (1, 2, 3)."""
+            b = _f(base_chip)
+            # 15 chips at each level with 1x, 2x, 3x
+            return b * 15 * 1 + b * 15 * 2 + b * 15 * 3
+
         def _recalc_fin(e=None):
-            """Recalculate CHIP IN based on progression inputs"""
+            """Recalculate CHIP IN based on base chip"""
             try:
                 bk = _f(self.banca_input.value)
                 base = _f(self.fin_base_input.value)
-                p1 = _f(self.fin_prog1_input.value)
-                p2 = _f(self.fin_prog2_input.value)
-                p3 = _f(self.fin_prog3_input.value)
                 
-                total = _chips_from_progression(base, p1, p2, p3)
+                total = _chips_from_progression(base)
                 self.fin_input.value = str(total)
                 self.fin_input.update()
-                _refresh_labels(bk, base, p1, p2, p3, _f(self.fout_input.value))
+                _refresh_labels(bk, base, _f(self.fout_input.value))
             except Exception:
                 pass
 
@@ -2969,51 +2970,37 @@ class LinupApp:
                 fout_val = _round_up_chip(factor / 18)  # 18 = 2*(1+3+5)
                 self.fout_input.value = str(fout_val)
                 self.fout_input.update()
-                _refresh_labels(bk, _f(self.fin_base_input.value), 
-                               _f(self.fin_prog1_input.value),
-                               _f(self.fin_prog2_input.value),
-                               _f(self.fin_prog3_input.value),
-                               fout_val)
+                
+                # Also recalculate CHIP IN
+                base = _f(self.fin_base_input.value)
+                total_fin = _chips_from_progression(base)
+                self.fin_input.value = str(total_fin)
+                self.fin_input.update()
+                
+                _refresh_labels(bk, base, fout_val)
             except Exception:
                 pass
 
         def _on_bank_change(e):
             _recalc_fout()
+            _recalc_fin()
 
         self.max_loss_input = ft.TextField(
             value=str(sug_max_loss),
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
             keyboard_type=ft.KeyboardType.NUMBER,
-            on_change=lambda e: _recalc_fout(),
+            on_change=lambda e: (_recalc_fout(), _recalc_fin()),
         )
 
-        # CHIP IN Progression controls
+        # CHIP IN Base Chip control
         self.fin_base_input = ft.TextField(
             value=str(sug_base_chip),
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
             keyboard_type=ft.KeyboardType.NUMBER,
             on_change=_recalc_fin,
         )
-        self.fin_prog1_input = ft.TextField(
-            value="1",
-            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
-            keyboard_type=ft.KeyboardType.NUMBER,
-            on_change=_recalc_fin,
-        )
-        self.fin_prog2_input = ft.TextField(
-            value="2",
-            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
-            keyboard_type=ft.KeyboardType.NUMBER,
-            on_change=_recalc_fin,
-        )
-        self.fin_prog3_input = ft.TextField(
-            value="3",
-            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
-            keyboard_type=ft.KeyboardType.NUMBER,
-            on_change=_recalc_fin,
-        )
 
-        sug_fin_total = _chips_from_progression(sug_base_chip, '1', '2', '3')
+        sug_fin_total = _chips_from_progression(sug_base_chip)
 
         self.fin_input = ft.TextField(
             value=str(sug_fin_total),
@@ -3028,8 +3015,6 @@ class LinupApp:
             on_change=lambda _e: _refresh_labels(
                 _f(self.banca_input.value),
                 _f(self.fin_base_input.value),
-                _f(self.fin_prog1_input.value),
-                _f(self.fin_prog2_input.value),
                 _f(self.fout_input.value),
             ),
         )
@@ -3136,24 +3121,10 @@ class LinupApp:
                         self.banca_input,
                         ft.Text("MAX LOSS %:", color=ft.Colors.WHITE),
                         self.max_loss_input,
-                        ft.Text("CHIP IN — PROGRESSION", color='#27ae60', size=12,
+                        ft.Text("CHIP IN — PROGRESSION (1x, 2x, 3x)", color='#27ae60', size=12,
                                 weight=ft.FontWeight.BOLD),
-                        ft.Text("Base Chip (min unit):", color='#7f8c8d', size=11),
+                        ft.Text("Base Chip:", color='#7f8c8d', size=11),
                         self.fin_base_input,
-                        ft.Row(controls=[
-                            ft.Column(controls=[
-                                ft.Text("1x", color='#7f8c8d', size=10),
-                                self.fin_prog1_input,
-                            ], expand=1),
-                            ft.Column(controls=[
-                                ft.Text("2x", color='#7f8c8d', size=10),
-                                self.fin_prog2_input,
-                            ], expand=1),
-                            ft.Column(controls=[
-                                ft.Text("3x", color='#7f8c8d', size=10),
-                                self.fin_prog3_input,
-                            ], expand=1),
-                        ], spacing=6),
                         self.fin_label,
                         self.fin_input,
                         self.fout_label,
