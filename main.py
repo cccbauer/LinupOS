@@ -702,234 +702,30 @@ class LinupApp:
         if inv_type == 'FIAT':
             bank_per_table = round(capital * 0.03, 2)
             capital_per_table = round(capital / num_tables, 2)
-            default_max_loss_pct = 1.5  # Default: 1.5% of capital
             
-            name_fields, bank_fields, max_loss_fields = [], [], []
+            name_fields, bank_fields = [], []
             rows = []
-            
-            # Helper functions for calculations
-            def calc_chip_in(capital_val, max_loss_pct_val):
-                """Calculate chip-in: (capital * max_loss_pct / 100) / (15 * 6)
-                where 6 = 1 + 2 + 3 (progression multipliers for 1x,2x,3x)
-                Capped at max 0.1 per chip"""
-                try:
-                    capital = float(capital_val or capital_per_table)
-                    max_loss_pct = float(max_loss_pct_val or default_max_loss_pct)
-                    if capital <= 0 or max_loss_pct <= 0:
-                        return "0.00"
-                    chip_in = (capital * max_loss_pct / 100) / (15 * 6)
-                    chip_in = min(chip_in, 0.1)  # Cap at 0.1
-                    return f"{chip_in:.4f}"
-                except Exception:
-                    return "0.00"
-            
-            def calc_chip_out(capital_val, max_loss_pct_val):
-                """Calculate chip-out: (capital * max_loss_pct / 100) / 18
-                where 18 = 2 * (1 + 3 + 5) - 2 dozens/lines at 1x,3x,5x progression
-                Capped at max 0.5 per chip to match CHIP IN % of capital (90/18 = 5x ratio)"""
-                try:
-                    capital = float(capital_val or capital_per_table)
-                    max_loss_pct = float(max_loss_pct_val or default_max_loss_pct)
-                    if capital <= 0 or max_loss_pct <= 0:
-                        return "0.00"
-                    chip_out = (capital * max_loss_pct / 100) / 18
-                    chip_out = min(chip_out, 0.5)  # Cap at 0.5 (not 0.1) to match CHIP IN percentage
-                    return f"{chip_out:.4f}"
-                except Exception:
-                    return "0.00"
-            
-            def calc_chip_loss_pct(chip_val, capital_val):
-                """Calculate what % of capital this chip represents"""
-                try:
-                    chip = float(chip_val or 0)
-                    cap = float(capital_val or 1)
-                    if cap <= 0:
-                        return "0.00"
-                    loss_pct = (chip / cap) * 100
-                    return f"{loss_pct:.2f}"
-                except Exception:
-                    return "0.00"
-            
-            def calc_from_min_chip(min_chip_val):
-                """Calculate CHIP IN and CHIP OUT totals from a minimum chip value
-                Returns (chip_in_total, chip_out_total, breakdown_in, breakdown_out)"""
-                try:
-                    min_chip = float(min_chip_val or 0.05)
-                    if min_chip <= 0:
-                        return 0.0, 0.0, "", ""
-                    
-                    # CHIP IN: 15 chips × (1+2+3) progression
-                    chip_in_1x = min_chip * 15 * 1
-                    chip_in_2x = min_chip * 15 * 2
-                    chip_in_3x = min_chip * 15 * 3
-                    chip_in_total = chip_in_1x + chip_in_2x + chip_in_3x
-                    chip_in_breakdown = f"1x(${chip_in_1x:.2f}) + 2x(${chip_in_2x:.2f}) + 3x(${chip_in_3x:.2f}) = ${chip_in_total:.2f}"
-                    
-                    # CHIP OUT: 2 dozens/lines × (1+3+5) progression
-                    chip_out_1x = min_chip * 2 * 1
-                    chip_out_3x = min_chip * 2 * 3
-                    chip_out_5x = min_chip * 2 * 5
-                    chip_out_total = chip_out_1x + chip_out_3x + chip_out_5x
-                    chip_out_breakdown = f"1x(${chip_out_1x:.2f}) + 3x(${chip_out_3x:.2f}) + 5x(${chip_out_5x:.2f}) = ${chip_out_total:.2f}"
-                    
-                    return chip_in_total, chip_out_total, chip_in_breakdown, chip_out_breakdown
-                except Exception:
-                    return 0.0, 0.0, "", ""
-            
-            # Store table fields as instance variables for easy access in handlers
-            self.table_setup_fields = []  # list of {nf, bf, mlf, mcf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t}
             
             for i in range(num_tables):
                 nf = ft.TextField(
                     value=f"TABLE {i + 1}",
                     bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
-                    expand=2,
-                    text_size=14,
+                    expand=2, text_size=14,
                 )
                 bf = ft.TextField(
                     value=str(bank_per_table),
                     bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
-                    keyboard_type=ft.KeyboardType.NUMBER, expand=1,
-                    text_size=14,
-                )
-                mlf = ft.TextField(
-                    value=str(default_max_loss_pct),
-                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
-                    keyboard_type=ft.KeyboardType.NUMBER, expand=1,
-                    text_size=14,
-                )
-                
-                mcf = ft.TextField(
-                    value="0.05",
-                    bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
-                    keyboard_type=ft.KeyboardType.NUMBER, expand=1,
-                    text_size=14,
-                )
-
-                chip_in_val = calc_chip_in(str(capital_per_table), str(default_max_loss_pct))
-                chip_out_val = calc_chip_out(str(capital_per_table), str(default_max_loss_pct))
-                
-                chip_in_f = ft.TextField(
-                    value=chip_in_val,
-                    bgcolor='#27ae60', color='#ffffff', height=40,
-                    text_align=ft.TextAlign.CENTER, expand=1, read_only=True,
-                    text_size=14,
-                )
-                chip_in_float = float(chip_in_val)
-                chip_in_1x = chip_in_float * 15 * 1
-                chip_in_2x = chip_in_float * 15 * 2
-                chip_in_3x = chip_in_float * 15 * 3
-                chip_in_total = chip_in_1x + chip_in_2x + chip_in_3x
-                chip_in_loss_pct_val = calc_chip_loss_pct(str(chip_in_total), str(capital_per_table))
-                chip_in_bank_pct = (chip_in_total / bank_per_table * 100) if bank_per_table > 0 else 0.0
-                chip_in_loss_t = ft.Text(
-                    f"{chip_in_loss_pct_val}% of Capital ({chip_in_bank_pct:.2f}% of Bank)  |  1x(${chip_in_1x:.2f}) + 2x(${chip_in_2x:.2f}) + 3x(${chip_in_3x:.2f}) = ${chip_in_total:.2f}",
-                    color='#27ae60', size=12,
-                )
-                
-                chip_out_val = calc_chip_out(str(capital_per_table), str(default_max_loss_pct))
-                chip_out_f = ft.TextField(
-                    value=chip_out_val,
-                    bgcolor='#f39c12', color='#ffffff', height=40,
-                    text_align=ft.TextAlign.CENTER, expand=1, read_only=True,
-                    text_size=14,
-                )
-                chip_out_float = float(chip_out_val)
-                chip_out_1x = chip_out_float * 2 * 1
-                chip_out_3x = chip_out_float * 2 * 3
-                chip_out_5x = chip_out_float * 2 * 5
-                chip_out_total = chip_out_1x + chip_out_3x + chip_out_5x
-                chip_out_loss_pct_val = calc_chip_loss_pct(str(chip_out_total), str(capital_per_table))
-                chip_out_bank_pct = (chip_out_total / bank_per_table * 100) if bank_per_table > 0 else 0.0
-                chip_out_loss_t = ft.Text(
-                    f"{chip_out_loss_pct_val}% of Capital ({chip_out_bank_pct:.2f}% of Bank)  |  1x(${chip_out_1x:.2f}) + 3x(${chip_out_3x:.2f}) + 5x(${chip_out_5x:.2f}) = ${chip_out_total:.2f}",
-                    color='#f39c12', size=12,
+                    keyboard_type=ft.KeyboardType.NUMBER, expand=1, text_size=14,
                 )
                 
                 name_fields.append(nf)
                 bank_fields.append(bf)
-                max_loss_fields.append(mlf)
                 
-                # Store all fields for this table
-                table_idx = i
-                table_fields_dict = {
-                    'nf': nf, 'bf': bf, 'mlf': mlf, 'mcf': mcf,
-                    'chip_in_f': chip_in_f, 'chip_in_loss_t': chip_in_loss_t,
-                    'chip_out_f': chip_out_f, 'chip_out_loss_t': chip_out_loss_t
-                }
-                self.table_setup_fields.append(table_fields_dict)
-                
-                # Create handler factory with table index
-                def make_handler(tbl_idx):
-                    def on_change(e=None):
-                        tfd = self.table_setup_fields[tbl_idx]
-                        try:
-                            bank_val = float(tfd['bf'].value or bank_per_table)
-                        except:
-                            bank_val = bank_per_table
-                        
-                        new_chip_in = calc_chip_in(str(capital_per_table), tfd['mlf'].value)
-                        new_chip_out = calc_chip_out(str(capital_per_table), tfd['mlf'].value)
-                        
-                        chip_in_float = float(new_chip_in)
-                        chip_in_1x = chip_in_float * 15 * 1
-                        chip_in_2x = chip_in_float * 15 * 2
-                        chip_in_3x = chip_in_float * 15 * 3
-                        chip_in_total = chip_in_1x + chip_in_2x + chip_in_3x
-                        chip_in_loss_pct = calc_chip_loss_pct(str(chip_in_total), str(capital_per_table))
-                        
-                        chip_out_float = float(new_chip_out)
-                        chip_out_1x = chip_out_float * 2 * 1
-                        chip_out_3x = chip_out_float * 2 * 3
-                        chip_out_5x = chip_out_float * 2 * 5
-                        chip_out_total = chip_out_1x + chip_out_3x + chip_out_5x
-                        chip_out_loss_pct = calc_chip_loss_pct(str(chip_out_total), str(capital_per_table))
-                        
-                        chip_in_bank_pct = (chip_in_total / bank_val * 100) if bank_val > 0 else 0.0
-                        tfd['chip_in_f'].value = new_chip_in
-                        tfd['chip_in_loss_t'].value = f"{chip_in_loss_pct}% of Capital ({chip_in_bank_pct:.2f}% of Bank)  |  1x(${chip_in_1x:.2f}) + 2x(${chip_in_2x:.2f}) + 3x(${chip_in_3x:.2f}) = ${chip_in_total:.2f}"
-                        tfd['chip_in_f'].update()
-                        tfd['chip_in_loss_t'].update()
-                        
-                        chip_out_bank_pct = (chip_out_total / bank_val * 100) if bank_val > 0 else 0.0
-                        tfd['chip_out_f'].value = new_chip_out
-                        tfd['chip_out_loss_t'].value = f"{chip_out_loss_pct}% of Capital ({chip_out_bank_pct:.2f}% of Bank)  |  1x(${chip_out_1x:.2f}) + 3x(${chip_out_3x:.2f}) + 5x(${chip_out_5x:.2f}) = ${chip_out_total:.2f}"
-                        tfd['chip_out_f'].update()
-                        tfd['chip_out_loss_t'].update()
-                    
-                    return on_change
-                
-                bf.on_change = make_handler(table_idx)
-                mlf.on_change = make_handler(table_idx)
-                
-                rows.append(ft.Container(
-                    bgcolor='#222222', border_radius=8, padding=10,
-                    margin=ft.margin.only(bottom=8),
-                    content=ft.Column(spacing=6, controls=[
-                        ft.Text(f"TABLE {i + 1}", color='#7f8c8d', size=11),
-                        ft.Row(controls=[ft.Text("CAPITAL:", color='#7f8c8d', width=80, size=12), ft.TextField(
-                            value=f"${capital_per_table:.2f}",
-                            bgcolor='#555555', color=ft.Colors.WHITE, height=40,
-                            text_align=ft.TextAlign.CENTER, expand=1, read_only=True,
-                            text_size=14,
-                        )], spacing=6),
-                        ft.Row(controls=[ft.Text("TABLE:", color='#7f8c8d', width=80, size=12), nf], spacing=6),
-                        ft.Row(controls=[ft.Text("BANK:", color='#7f8c8d', width=80, size=12), bf], spacing=6),
-                        ft.Row(controls=[ft.Text("MIN CHIP:", color='#7f8c8d', width=80, size=12), mcf], spacing=6),
-                        ft.Divider(color='#444444', height=1),
-                        ft.Text("METHOD 1: BY MAX LOSS %", color='#95a5a6', size=11, weight=ft.FontWeight.BOLD),
-                        ft.Text("Enter Max Loss % to calculate chip values", color='#7f8c8d', size=10),
-                        ft.Row(controls=[ft.Text("MAX LOSS %:", color='#7f8c8d', width=80, size=12), mlf], spacing=6),
-                        ft.Row(controls=[ft.Text("CHIP IN:", color='#27ae60', width=80, size=12), chip_in_f], spacing=6),
-                        chip_in_loss_t,
-                        ft.Row(controls=[ft.Text("CHIP OUT:", color='#f39c12', width=80, size=12), chip_out_f], spacing=6),
-                        chip_out_loss_t,
-                    ]),
-                ))
+                rows.append(ft.Row(controls=[nf, bf], spacing=6))
 
             def on_create_fiat(_):
                 tables_data = []
-                for nf, bf, mlf in zip(name_fields, bank_fields, max_loss_fields):
+                for nf, bf in zip(name_fields, bank_fields):
                     t_name = nf.value.strip().upper() or f"TABLE {len(tables_data) + 1}"
                     try:
                         t_bank = float(bf.value or bank_per_table)
@@ -947,8 +743,11 @@ class LinupApp:
                 ft.Text(f"{inv_name}  |  Capital: ${capital:.2f}", color='#3498db',
                         size=16, weight=ft.FontWeight.BOLD),
                 ft.Container(height=4),
-                ft.Text("Enter Max Loss % to calculate chip values. Min Chip shows alternative scenario.",
-                        color='#95a5a6', size=10),
+                ft.Text("Table Names", color='#7f8c8d', size=12),
+                ft.Row(controls=[
+                    ft.Text("TABLE", color='#7f8c8d', size=11, expand=2),
+                    ft.Text("BANK", color='#7f8c8d', size=11, expand=1),
+                ]),
                 ft.Container(height=8),
             ] + rows + [
                 ft.Container(height=20),
@@ -3072,6 +2871,7 @@ class LinupApp:
         )
         sug_bank     = self.banca_actual
         sug_max_loss = 33.0    # default: 3 losses = 33% bank
+        sug_base_chip = 0.05   # default base chip for progression
 
         def _round_up_chip(val):
             if val <= 0:
@@ -3080,6 +2880,7 @@ class LinupApp:
                 return math.floor(round(val * 10, 8)) / 10
             return float(math.floor(val / 10) * 10)
 
+        # Initial calculations
         sug_fin  = _round_up_chip(sug_bank * (sug_max_loss / 100) / 225)
         sug_fout = sug_fin * 10
 
@@ -3089,11 +2890,30 @@ class LinupApp:
             except Exception:
                 return 0.0
 
-        def _chips_from(bk, loss_pct):
-            """Return (fin, fout) given bank and max-loss %."""
-            factor = bk * max(loss_pct, 0) / 100
-            fin = _round_up_chip(factor / 225)
-            return fin, fin * 10
+        def _chips_from_progression(base_chip, prog_1x, prog_2x, prog_3x):
+            """Calculate CHIP IN total from base chip and progression multipliers."""
+            b = _f(base_chip)
+            p1 = _f(prog_1x)
+            p2 = _f(prog_2x)
+            p3 = _f(prog_3x)
+            # 15 chips at each level
+            return b * 15 * p1 + b * 15 * p2 + b * 15 * p3
+
+        def _chip_label_text_prog(base_chip, prog_1x, prog_2x, prog_3x, bank, max_loss_pct):
+            """Generate label for CHIP IN with progression breakdown."""
+            try:
+                b = _f(base_chip)
+                p1 = _f(prog_1x)
+                p2 = _f(prog_2x)
+                p3 = _f(prog_3x)
+                total_1x = b * 15 * p1
+                total_2x = b * 15 * p2
+                total_3x = b * 15 * p3
+                total = total_1x + total_2x + total_3x
+                pct = (total / bank * 100) if bank > 0 else 0
+                return (f"({pct:.4f}% bank · 1x({total_1x:.2f}) + 2x({total_2x:.2f}) + 3x({total_3x:.2f}) = ${total:.2f})")
+            except Exception:
+                return ""
 
         def _chip_label_text(chip_val, bank, multiplier_sum, max_loss_pct):
             """chip_val × multiplier_sum = total 3-loss cost; % relative to bank"""
@@ -3107,7 +2927,7 @@ class LinupApp:
                 return ""
 
         self.fin_label  = ft.Text(
-            f"CHIP IN {_chip_label_text(sug_fin,  sug_bank, 225, sug_max_loss)}:",
+            f"CHIP IN {_chip_label_text_prog(sug_base_chip, '1', '2', '3', sug_bank, sug_max_loss)}:",
             color=ft.Colors.WHITE,
         )
         self.fout_label = ft.Text(
@@ -3115,48 +2935,91 @@ class LinupApp:
             color=ft.Colors.WHITE,
         )
 
-        def _refresh_labels(bank, fin_val, fout_val):
-            ml = _f(self.max_loss_input.value)
-            self.fin_label.value  = f"CHIP IN {_chip_label_text(fin_val,  bank, 225, ml)}:"
-            self.fout_label.value = f"CHIP OUT {_chip_label_text(fout_val, bank, 26,  ml)}:"
+        def _refresh_labels(bank, base_chip_val, prog1, prog2, prog3, fout_val):
+            self.fin_label.value  = f"CHIP IN {_chip_label_text_prog(base_chip_val, prog1, prog2, prog3, bank, _f(self.max_loss_input.value))}:"
+            self.fout_label.value = f"CHIP OUT {_chip_label_text(fout_val, bank, 26, _f(self.max_loss_input.value))}:"
             try:
                 self.fin_label.update()
                 self.fout_label.update()
             except Exception:
                 pass
 
-        def _recalc(e=None):
+        def _recalc_fin(e=None):
+            """Recalculate CHIP IN based on progression inputs"""
+            try:
+                bk = _f(self.banca_input.value)
+                base = _f(self.fin_base_input.value)
+                p1 = _f(self.fin_prog1_input.value)
+                p2 = _f(self.fin_prog2_input.value)
+                p3 = _f(self.fin_prog3_input.value)
+                
+                total = _chips_from_progression(base, p1, p2, p3)
+                self.fin_input.value = str(total)
+                self.fin_input.update()
+                _refresh_labels(bk, base, p1, p2, p3, _f(self.fout_input.value))
+            except Exception:
+                pass
+
+        def _recalc_fout(e=None):
+            """Recalculate CHIP OUT (keep same formula)"""
             try:
                 bk  = _f(self.banca_input.value)
                 ml  = _f(self.max_loss_input.value)
-                fin_val, fout_val = _chips_from(bk, ml)
-                self.fin_input.value  = str(fin_val)
+                factor = bk * max(ml, 0) / 100
+                fout_val = _round_up_chip(factor / 18)  # 18 = 2*(1+3+5)
                 self.fout_input.value = str(fout_val)
-                self.fin_input.update()
                 self.fout_input.update()
-                _refresh_labels(bk, fin_val, fout_val)
+                _refresh_labels(bk, _f(self.fin_base_input.value), 
+                               _f(self.fin_prog1_input.value),
+                               _f(self.fin_prog2_input.value),
+                               _f(self.fin_prog3_input.value),
+                               fout_val)
             except Exception:
                 pass
 
         def _on_bank_change(e):
-            _recalc()
+            _recalc_fout()
 
         self.max_loss_input = ft.TextField(
             value=str(sug_max_loss),
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
             keyboard_type=ft.KeyboardType.NUMBER,
-            on_change=lambda e: _recalc(),
+            on_change=lambda e: _recalc_fout(),
         )
 
+        # CHIP IN Progression controls
+        self.fin_base_input = ft.TextField(
+            value=str(sug_base_chip),
+            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            on_change=_recalc_fin,
+        )
+        self.fin_prog1_input = ft.TextField(
+            value="1",
+            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            on_change=_recalc_fin,
+        )
+        self.fin_prog2_input = ft.TextField(
+            value="2",
+            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            on_change=_recalc_fin,
+        )
+        self.fin_prog3_input = ft.TextField(
+            value="3",
+            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=40,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            on_change=_recalc_fin,
+        )
+
+        sug_fin_total = _chips_from_progression(sug_base_chip, '1', '2', '3')
+
         self.fin_input = ft.TextField(
-            value=str(sug_fin),
+            value=str(sug_fin_total),
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
             keyboard_type=ft.KeyboardType.NUMBER,
-            on_change=lambda _e: _refresh_labels(
-                _f(self.banca_input.value),
-                _f(self.fin_input.value),
-                _f(self.fout_input.value),
-            ),
+            read_only=True,
         )
         self.fout_input = ft.TextField(
             value=str(sug_fout),
@@ -3164,7 +3027,9 @@ class LinupApp:
             keyboard_type=ft.KeyboardType.NUMBER,
             on_change=lambda _e: _refresh_labels(
                 _f(self.banca_input.value),
-                _f(self.fin_input.value),
+                _f(self.fin_base_input.value),
+                _f(self.fin_prog1_input.value),
+                _f(self.fin_prog2_input.value),
                 _f(self.fout_input.value),
             ),
         )
@@ -3265,6 +3130,24 @@ class LinupApp:
                         self.banca_input,
                         ft.Text("MAX LOSS %:", color=ft.Colors.WHITE),
                         self.max_loss_input,
+                        ft.Text("CHIP IN — PROGRESSION", color='#27ae60', size=12,
+                                weight=ft.FontWeight.BOLD),
+                        ft.Text("Base Chip (min unit):", color='#7f8c8d', size=11),
+                        self.fin_base_input,
+                        ft.Row(controls=[
+                            ft.Column(controls=[
+                                ft.Text("1x", color='#7f8c8d', size=10),
+                                self.fin_prog1_input,
+                            ], expand=1),
+                            ft.Column(controls=[
+                                ft.Text("2x", color='#7f8c8d', size=10),
+                                self.fin_prog2_input,
+                            ], expand=1),
+                            ft.Column(controls=[
+                                ft.Text("3x", color='#7f8c8d', size=10),
+                                self.fin_prog3_input,
+                            ], expand=1),
+                        ], spacing=6),
                         self.fin_label,
                         self.fin_input,
                         self.fout_label,
@@ -3302,8 +3185,10 @@ class LinupApp:
             self.nombre_mesa   = str(self.table_input.value).upper() or "TABLE 1"
             self.banca_inicial = float(self.banca_input.value or 100)
             self.banca_actual  = self.banca_inicial
-            self.val_fin       = float(self.fin_input.value)  if self.fin_input.value  else round(self.banca_inicial / 225, 6)
-            self.val_fout      = float(self.fout_input.value) if self.fout_input.value else round(self.banca_inicial / 26, 4)
+            
+            # CHIP IN is calculated from progression
+            self.val_fin       = float(self.fin_input.value)  if self.fin_input.value  else 0.5
+            self.val_fout      = float(self.fout_input.value) if self.fout_input.value else 0.5
         except Exception:
             pass
         # Read column visibility checkboxes
