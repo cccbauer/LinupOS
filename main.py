@@ -2993,7 +2993,7 @@ class LinupApp:
             on_change=_recalc_fin,
         )
 
-        sug_fin_total = _chips_from_progression(sug_base_chip)
+        sug_fin_total = _round_up_chip(_chips_from_progression(sug_base_chip))
 
         self.fin_input = ft.TextField(
             value=str(sug_fin_total),
