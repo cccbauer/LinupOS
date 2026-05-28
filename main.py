@@ -2890,15 +2890,6 @@ class LinupApp:
             except Exception:
                 return 0.0
 
-        def _chips_from_progression(base_chip, prog_1x, prog_2x, prog_3x):
-            """Calculate CHIP IN total from base chip and progression multipliers."""
-            b = _f(base_chip)
-            p1 = _f(prog_1x)
-            p2 = _f(prog_2x)
-            p3 = _f(prog_3x)
-            # 15 chips at each level
-            return b * 15 * p1 + b * 15 * p2 + b * 15 * p3
-
         def _chip_label_text_prog(base_chip, bank, max_loss_pct):
             """Generate label for CHIP IN with fixed progression (1, 2, 3)."""
             try:
