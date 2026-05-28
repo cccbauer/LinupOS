@@ -803,20 +803,7 @@ class LinupApp:
                     keyboard_type=ft.KeyboardType.NUMBER, expand=1,
                     text_size=14,
                 )
-                
-                # Calculate from min chip value
-                min_chip_in_total, min_chip_out_total, min_chip_in_bd, min_chip_out_bd = calc_from_min_chip("0.05")
-                min_chip_in_loss_pct = calc_chip_loss_pct(str(min_chip_in_total), str(capital_per_table))
-                min_chip_out_loss_pct = calc_chip_loss_pct(str(min_chip_out_total), str(capital_per_table))
-                
-                min_chip_in_loss_t = ft.Text(
-                    f"{min_chip_in_loss_pct}% of Capital  |  {min_chip_in_bd}",
-                    color='#27ae60', size=12,
-                )
-                min_chip_out_loss_t = ft.Text(
-                    f"{min_chip_out_loss_pct}% of Capital  |  {min_chip_out_bd}",
-                    color='#f39c12', size=12,
-                )
+
                 
                 # Chip In and Out values from MAX LOSS %
                 chip_in_val = calc_chip_in(str(capital_per_table), str(default_max_loss_pct))
@@ -835,8 +822,9 @@ class LinupApp:
                 chip_in_3x = chip_in_float * 15 * 3
                 chip_in_total = chip_in_1x + chip_in_2x + chip_in_3x
                 chip_in_loss_pct_val = calc_chip_loss_pct(str(chip_in_total), str(capital_per_table))
+                chip_in_bank_pct = (chip_in_total / bank_per_table * 100) if bank_per_table > 0 else 0.0
                 chip_in_loss_t = ft.Text(
-                    f"{chip_in_loss_pct_val}% of Capital  |  1x(${chip_in_1x:.2f}) + 2x(${chip_in_2x:.2f}) + 3x(${chip_in_3x:.2f}) = ${chip_in_total:.2f}",
+                    f"{chip_in_loss_pct_val}% of Capital ({chip_in_bank_pct:.2f}% of Bank)  |  1x(${chip_in_1x:.2f}) + 2x(${chip_in_2x:.2f}) + 3x(${chip_in_3x:.2f}) = ${chip_in_total:.2f}",
                     color='#27ae60', size=12,
                 )
                 
@@ -854,8 +842,9 @@ class LinupApp:
                 chip_out_5x = chip_out_float * 2 * 5
                 chip_out_total = chip_out_1x + chip_out_3x + chip_out_5x
                 chip_out_loss_pct_val = calc_chip_loss_pct(str(chip_out_total), str(capital_per_table))
+                chip_out_bank_pct = (chip_out_total / bank_per_table * 100) if bank_per_table > 0 else 0.0
                 chip_out_loss_t = ft.Text(
-                    f"{chip_out_loss_pct_val}% of Capital  |  1x(${chip_out_1x:.2f}) + 3x(${chip_out_3x:.2f}) + 5x(${chip_out_5x:.2f}) = ${chip_out_total:.2f}",
+                    f"{chip_out_loss_pct_val}% of Capital ({chip_out_bank_pct:.2f}% of Bank)  |  1x(${chip_out_1x:.2f}) + 3x(${chip_out_3x:.2f}) + 5x(${chip_out_5x:.2f}) = ${chip_out_total:.2f}",
                     color='#f39c12', size=12,
                 )
                 
@@ -887,35 +876,27 @@ class LinupApp:
                             chip_out_total = chip_out_1x + chip_out_3x + chip_out_5x
                             chip_out_loss_pct = calc_chip_loss_pct(str(chip_out_total), str(capital_per_table))
                             
+                            chip_in_bank_pct = (chip_in_total / bank_per_table * 100) if bank_per_table > 0 else 0.0
                             chip_in_field.value = new_chip_in
-                            chip_in_loss_text.value = f"{chip_in_loss_pct}% of Capital  |  1x(${chip_in_1x:.2f}) + 2x(${chip_in_2x:.2f}) + 3x(${chip_in_3x:.2f}) = ${chip_in_total:.2f}"
+                            chip_in_loss_text.value = f"{chip_in_loss_pct}% of Capital ({chip_in_bank_pct:.2f}% of Bank)  |  1x(${chip_in_1x:.2f}) + 2x(${chip_in_2x:.2f}) + 3x(${chip_in_3x:.2f}) = ${chip_in_total:.2f}"
+                            
+                            chip_out_bank_pct = (chip_out_total / bank_per_table * 100) if bank_per_table > 0 else 0.0
                             chip_out_field.value = new_chip_out
-                            chip_out_loss_text.value = f"{chip_out_loss_pct}% of Capital  |  1x(${chip_out_1x:.2f}) + 3x(${chip_out_3x:.2f}) + 5x(${chip_out_5x:.2f}) = ${chip_out_total:.2f}"
-                            
-                            # Calculate from MIN CHIP VALUE
-                            min_chip_in_tot, min_chip_out_tot, min_chip_in_bd, min_chip_out_bd = calc_from_min_chip(min_chip_f.value)
-                            min_chip_in_loss_pct = calc_chip_loss_pct(str(min_chip_in_tot), str(capital_per_table))
-                            min_chip_out_loss_pct = calc_chip_loss_pct(str(min_chip_out_tot), str(capital_per_table))
-                            
-                            min_chip_in_loss_text.value = f"{min_chip_in_loss_pct}% of Capital  |  {min_chip_in_bd}"
-                            min_chip_out_loss_text.value = f"{min_chip_out_loss_pct}% of Capital  |  {min_chip_out_bd}"
+                            chip_out_loss_text.value = f"{chip_out_loss_pct}% of Capital ({chip_out_bank_pct:.2f}% of Bank)  |  1x(${chip_out_1x:.2f}) + 3x(${chip_out_3x:.2f}) + 5x(${chip_out_5x:.2f}) = ${chip_out_total:.2f}"
                             
                             try:
                                 chip_in_field.update()
                                 chip_in_loss_text.update()
                                 chip_out_field.update()
                                 chip_out_loss_text.update()
-                                min_chip_in_loss_text.update()
-                                min_chip_out_loss_text.update()
                             except Exception:
                                 pass
                         except Exception:
                             pass
                     return on_change
                 
-                bf.on_change = make_update_handler(bf, mlf, mcf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t, min_chip_in_loss_t, min_chip_out_loss_t)
-                mlf.on_change = lambda _=None: make_update_handler(bf, mlf, mcf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t, min_chip_in_loss_t, min_chip_out_loss_t)(None)
-                mcf.on_change = lambda _=None: make_update_handler(bf, mlf, mcf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t, min_chip_in_loss_t, min_chip_out_loss_t)(None)
+                bf.on_change = make_update_handler(bf, mlf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t)
+                mlf.on_change = lambda _=None: make_update_handler(bf, mlf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t)(None)
                 
                 rows.append(ft.Container(
                     bgcolor='#222222', border_radius=8, padding=10,
@@ -930,6 +911,7 @@ class LinupApp:
                         )], spacing=6),
                         ft.Row(controls=[ft.Text("TABLE:", color='#7f8c8d', width=80, size=12), nf], spacing=6),
                         ft.Row(controls=[ft.Text("BANK:", color='#7f8c8d', width=80, size=12), bf], spacing=6),
+                        ft.Row(controls=[ft.Text("MIN CHIP:", color='#7f8c8d', width=80, size=12), mcf], spacing=6),
                         ft.Divider(color='#444444', height=1),
                         ft.Text("METHOD 1: BY MAX LOSS %", color='#95a5a6', size=11, weight=ft.FontWeight.BOLD),
                         ft.Text("Enter Max Loss % to calculate chip values", color='#7f8c8d', size=10),
@@ -938,13 +920,6 @@ class LinupApp:
                         chip_in_loss_t,
                         ft.Row(controls=[ft.Text("CHIP OUT:", color='#f39c12', width=80, size=12), chip_out_f], spacing=6),
                         chip_out_loss_t,
-                        ft.Divider(color='#444444', height=1),
-                        ft.Text("METHOD 2: BY MIN CHIP VALUE", color='#95a5a6', size=11, weight=ft.FontWeight.BOLD),
-                        ft.Row(controls=[ft.Text("MIN CHIP:", color='#7f8c8d', width=80, size=12), mcf], spacing=6),
-                        ft.Text("CHIP IN TOTAL (from min chip):", color='#27ae60', size=12),
-                        min_chip_in_loss_t,
-                        ft.Text("CHIP OUT TOTAL (from min chip):", color='#f39c12', size=12),
-                        min_chip_out_loss_t,
                     ]),
                 ))
 
@@ -968,7 +943,7 @@ class LinupApp:
                 ft.Text(f"{inv_name}  |  Capital: ${capital:.2f}", color='#3498db',
                         size=16, weight=ft.FontWeight.BOLD),
                 ft.Container(height=4),
-                ft.Text("METHOD 1: Enter Max Loss % to calculate chip values  |  METHOD 2: Enter Min Chip to see total loss",
+                ft.Text("Enter Max Loss % to calculate chip values. Min Chip shows alternative scenario.",
                         color='#95a5a6', size=10),
                 ft.Container(height=8),
             ] + rows + [
