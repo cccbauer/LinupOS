@@ -853,7 +853,7 @@ class LinupApp:
                 max_loss_fields.append(mlf)
                 
                 # Create handler for field updates
-                def make_update_handler(bank_f, max_loss_f, min_chip_f, chip_in_field, chip_in_loss_text, chip_out_field, chip_out_loss_text, min_chip_in_loss_text, min_chip_out_loss_text):
+                def make_update_handler(bank_f, max_loss_f, chip_in_field, chip_in_loss_text, chip_out_field, chip_out_loss_text):
                     def on_change(_=None):
                         try:
                             # Calculate both chip values from the max loss %
