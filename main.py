@@ -710,26 +710,30 @@ class LinupApp:
             # Helper functions for calculations
             def calc_chip_in(capital_val, max_loss_pct_val):
                 """Calculate chip-in: (capital * max_loss_pct / 100) / (15 * 6)
-                where 6 = 1 + 2 + 3 (progression multipliers for 1x,2x,3x)"""
+                where 6 = 1 + 2 + 3 (progression multipliers for 1x,2x,3x)
+                Capped at max 0.1 per chip"""
                 try:
                     capital = float(capital_val or capital_per_table)
                     max_loss_pct = float(max_loss_pct_val or default_max_loss_pct)
                     if capital <= 0 or max_loss_pct <= 0:
                         return "0.00"
                     chip_in = (capital * max_loss_pct / 100) / (15 * 6)
+                    chip_in = min(chip_in, 0.1)  # Cap at 0.1
                     return f"{chip_in:.4f}"
                 except Exception:
                     return "0.00"
             
             def calc_chip_out(capital_val, max_loss_pct_val):
                 """Calculate chip-out: (capital * max_loss_pct / 100) / 18
-                where 18 = 2 * (1 + 3 + 5) - 2 dozens/lines at 1x,3x,5x progression"""
+                where 18 = 2 * (1 + 3 + 5) - 2 dozens/lines at 1x,3x,5x progression
+                Capped at max 0.1 per chip"""
                 try:
                     capital = float(capital_val or capital_per_table)
                     max_loss_pct = float(max_loss_pct_val or default_max_loss_pct)
                     if capital <= 0 or max_loss_pct <= 0:
                         return "0.00"
                     chip_out = (capital * max_loss_pct / 100) / 18
+                    chip_out = min(chip_out, 0.1)  # Cap at 0.1
                     return f"{chip_out:.4f}"
                 except Exception:
                     return "0.00"
