@@ -852,15 +852,18 @@ class LinupApp:
                 bank_fields.append(bf)
                 max_loss_fields.append(mlf)
                 
-                # Create handler for field updates
-                def make_update_handler(page, bank_f, max_loss_f, chip_in_field, chip_in_loss_text, chip_out_field, chip_out_loss_text):
-                    def on_change(_=None):
+                # Attach handlers using closure-safe default arguments
+                def attach_handlers(bf_ref, mlf_ref, chip_in_f_ref, chip_in_loss_t_ref, chip_out_f_ref, chip_out_loss_t_ref):
+                    def on_change_handler(e=None):
                         # Get current bank value from field
-                        bank_val = float(bank_f.value or bank_per_table)
+                        try:
+                            bank_val = float(bf_ref.value or bank_per_table)
+                        except:
+                            bank_val = bank_per_table
                         
                         # Calculate both chip values from the max loss %
-                        new_chip_in = calc_chip_in(str(capital_per_table), max_loss_f.value)
-                        new_chip_out = calc_chip_out(str(capital_per_table), max_loss_f.value)
+                        new_chip_in = calc_chip_in(str(capital_per_table), mlf_ref.value)
+                        new_chip_out = calc_chip_out(str(capital_per_table), mlf_ref.value)
                         
                         # Update CHIP IN
                         chip_in_float = float(new_chip_in)
@@ -879,18 +882,19 @@ class LinupApp:
                         chip_out_loss_pct = calc_chip_loss_pct(str(chip_out_total), str(capital_per_table))
                         
                         chip_in_bank_pct = (chip_in_total / bank_val * 100) if bank_val > 0 else 0.0
-                        chip_in_field.value = new_chip_in
-                        chip_in_loss_text.value = f"{chip_in_loss_pct}% of Capital ({chip_in_bank_pct:.2f}% of Bank)  |  1x(${chip_in_1x:.2f}) + 2x(${chip_in_2x:.2f}) + 3x(${chip_in_3x:.2f}) = ${chip_in_total:.2f}"
+                        chip_in_f_ref.value = new_chip_in
+                        chip_in_loss_t_ref.value = f"{chip_in_loss_pct}% of Capital ({chip_in_bank_pct:.2f}% of Bank)  |  1x(${chip_in_1x:.2f}) + 2x(${chip_in_2x:.2f}) + 3x(${chip_in_3x:.2f}) = ${chip_in_total:.2f}"
                         
                         chip_out_bank_pct = (chip_out_total / bank_val * 100) if bank_val > 0 else 0.0
-                        chip_out_field.value = new_chip_out
-                        chip_out_loss_text.value = f"{chip_out_loss_pct}% of Capital ({chip_out_bank_pct:.2f}% of Bank)  |  1x(${chip_out_1x:.2f}) + 3x(${chip_out_3x:.2f}) + 5x(${chip_out_5x:.2f}) = ${chip_out_total:.2f}"
+                        chip_out_f_ref.value = new_chip_out
+                        chip_out_loss_t_ref.value = f"{chip_out_loss_pct}% of Capital ({chip_out_bank_pct:.2f}% of Bank)  |  1x(${chip_out_1x:.2f}) + 3x(${chip_out_3x:.2f}) + 5x(${chip_out_5x:.2f}) = ${chip_out_total:.2f}"
                         
-                        page.update()
-                    return on_change
+                        self.page.update()
+                    
+                    bf_ref.on_change = on_change_handler
+                    mlf_ref.on_change = on_change_handler
                 
-                bf.on_change = make_update_handler(self.page, bf, mlf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t)
-                mlf.on_change = make_update_handler(self.page, bf, mlf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t)
+                attach_handlers(bf, mlf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t)
                 
                 rows.append(ft.Container(
                     bgcolor='#222222', border_radius=8, padding=10,
