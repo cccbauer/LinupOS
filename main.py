@@ -818,6 +818,10 @@ class LinupApp:
                     color='#f39c12', size=12,
                 )
                 
+                # Chip In and Out values from MAX LOSS %
+                chip_in_val = calc_chip_in(str(capital_per_table), str(default_max_loss_pct))
+                chip_out_val = calc_chip_out(str(capital_per_table), str(default_max_loss_pct))
+                
                 # Chip In field and loss display
                 chip_in_f = ft.TextField(
                     value=chip_in_val,
