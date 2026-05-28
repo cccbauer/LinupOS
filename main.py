@@ -896,7 +896,9 @@ class LinupApp:
                     return on_change
                 
                 bf.on_change = make_update_handler(bf, mlf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t)
-                mlf.on_change = lambda _=None: make_update_handler(bf, mlf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t)(None)
+                # Capture variables in default args to avoid late-binding closure issue in loop
+                mlf.on_change = (lambda bf=bf, mlf=mlf, chip_in_f=chip_in_f, chip_in_loss_t=chip_in_loss_t, chip_out_f=chip_out_f, chip_out_loss_t=chip_out_loss_t:
+                    make_update_handler(bf, mlf, chip_in_f, chip_in_loss_t, chip_out_f, chip_out_loss_t)(None))
                 
                 rows.append(ft.Container(
                     bgcolor='#222222', border_radius=8, padding=10,
