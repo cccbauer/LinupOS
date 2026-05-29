@@ -118,16 +118,41 @@ class LinupApp:
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
         self.page.scroll     = None
+        self.page.update()          # paint dark background before anything else loads
         self.page.on_resized = self._on_resize
 
         # Desktop-only window sizing (Android/iOS fill screen natively)
         _mobile = self.page.platform in (
             ft.PagePlatform.ANDROID, ft.PagePlatform.IOS)
         if not _mobile:
+            try:
+                import sys as _sys, ctypes as _ct, ctypes.util as _ctu
+
+                if _sys.platform == 'darwin':
+                    class _R(ctypes.Structure):
+                        _fields_ = [('x', _ct.c_double), ('y', _ct.c_double),
+                                    ('w', _ct.c_double), ('h', _ct.c_double)]
+                    _cg = _ct.cdll.LoadLibrary(_ctu.find_library('CoreGraphics'))
+                    _cg.CGMainDisplayID.restype = _ct.c_uint32
+                    _cg.CGDisplayBounds.restype = _R
+                    _b = _cg.CGDisplayBounds(_cg.CGMainDisplayID())
+                    screen_h = int(_b.h)
+                elif _sys.platform == 'win32':
+                    screen_h = _ct.windll.user32.GetSystemMetrics(1)
+                else:
+                    import tkinter as _tk
+                    _r = _tk.Tk(); _r.withdraw(); _r.update()
+                    screen_h = _r.winfo_screenheight()
+                    _r.destroy()
+            except Exception:
+                screen_h = 900
+            win_h = max(int(screen_h * 9 / 8), 600)
             self.page.window.width      = 420
-            self.page.window.height     = 860
+            self.page.window.height     = win_h
             self.page.window.min_width  = 380
-            self.page.window.min_height = 700
+            self.page.window.min_height = 600
+            self.page.window.left       = 0
+            self.page.window.top        = 0
 
         self.root = ft.Container(expand=True, bgcolor='#1a1a1a')
         self.page.add(self.root)
@@ -387,6 +412,42 @@ class LinupApp:
         finally:
             conn.close()
 
+    def _recompute_table_stats(self, investment_id: int):
+        """Rebuild table_stats wins/losses/last_bank entirely from compound_sessions."""
+        conn = self._get_conn()
+        if not conn:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT mesa, profit, bank_end FROM compound_sessions "
+                "WHERE investment_id=? ORDER BY session_num, id",
+                (investment_id,)
+            )
+            rows = cursor.fetchall()
+            mesa_stats = {}
+            for m, p, be in rows:
+                if m not in mesa_stats:
+                    mesa_stats[m] = {'wins': 0, 'losses': 0, 'last_bank': be}
+                if p > 0:
+                    mesa_stats[m]['wins'] += 1
+                elif p < 0:
+                    mesa_stats[m]['losses'] += 1
+                mesa_stats[m]['last_bank'] = be
+            for m, s in mesa_stats.items():
+                conn.execute(
+                    "INSERT INTO table_stats (investment_id, mesa, wins, losses, last_bank) "
+                    "VALUES (?, ?, ?, ?, ?) "
+                    "ON CONFLICT(investment_id, mesa) DO UPDATE SET "
+                    "wins=excluded.wins, losses=excluded.losses, last_bank=excluded.last_bank",
+                    (investment_id, m, s['wins'], s['losses'], s['last_bank'])
+                )
+            conn.commit()
+        except Exception:
+            pass
+        finally:
+            conn.close()
+
     # ──────────────────────────────────────────────────────────────────
     # STATE
     # ──────────────────────────────────────────────────────────────────
@@ -518,8 +579,10 @@ class LinupApp:
                     controls=[
                         ft.Text("Linup", color='#3498db', size=64,
                                 weight=ft.FontWeight.BOLD),
-                        ft.Container(height=8),
-                        ft.Text("v17.3", color='#7f8c8d', size=18),
+                        ft.Container(height=16),
+                        ft.Image(src="roulette.gif", width=200, height=200),
+                        ft.Container(height=16),
+                        ft.Text("v18.0.0", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -1025,9 +1088,20 @@ class LinupApp:
                 total_wins   = sum(d[2] for d in all_tdata)
                 total_losses = sum(d[3] for d in all_tdata)
 
+                # Sum profits per mesa from compound_sessions (source of truth after editing)
+                cursor.execute(
+                    "SELECT mesa, SUM(profit) FROM compound_sessions "
+                    "WHERE investment_id=? GROUP BY mesa",
+                    (investment_id,)
+                )
+                mesa_pl = {row[0]: (row[1] or 0.0) for row in cursor.fetchall()}
+
                 for i, (mesa_name, init_bank, wins, losses, last_bank) in enumerate(all_tdata):
                     # P/L from all OTHER tables (used in game screen bar)
-                    other_pl = sum((d[4] - d[1]) for j, d in enumerate(all_tdata) if j != i)
+                    if mesa_pl:
+                        other_pl = sum(v for k, v in mesa_pl.items() if k != mesa_name)
+                    else:
+                        other_pl = sum((d[4] - d[1]) for j, d in enumerate(all_tdata) if j != i)
 
                     total = wins + losses
                     eff   = (wins / total * 100) if total > 0 else 0.0
@@ -1066,7 +1140,11 @@ class LinupApp:
                         )
                     )
 
-                total_pl   = sum(d[4] - d[1] for d in all_tdata)
+                # Use sum of actual session profits when available; fall back to last_bank - init_bank
+                if mesa_pl:
+                    total_pl = sum(mesa_pl.values())
+                else:
+                    total_pl = sum(d[4] - d[1] for d in all_tdata)
                 total_bank = sum(d[4] for d in all_tdata)
                 if table_rows:
                     # Efficiency = avg per-table W/L ratio across tables that have played
@@ -1593,17 +1671,21 @@ class LinupApp:
         def on_add_session(ev):
             import datetime
             last_be = 0.0
+            last_date = datetime.date.today().strftime('%y.%m.%d')
+            last_mesa = ''
             if session_fields:
+                prev = session_fields[-1]
                 try:
-                    last_be = float(session_fields[-1]['be_field'].value or 0)
+                    last_be = float(prev['be_field'].value or 0)
                 except ValueError:
                     pass
-            today = datetime.date.today().strftime('%y.%m.%d')
+                last_date = prev['date_field'].value or last_date
+                last_mesa = prev['mesa_field'].value or ''
             entry = dict(
                 sid=None,
-                date_field=ft.TextField(value=today, bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
+                date_field=ft.TextField(value=last_date, bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
                                         height=36, width=75, text_size=11),
-                mesa_field=ft.TextField(value='', bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
+                mesa_field=ft.TextField(value=last_mesa, bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
                                         height=36, width=50, text_size=11),
                 bs_field=ft.TextField(value=str(round(last_be, 2)), bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
                                       height=36, keyboard_type=ft.KeyboardType.NUMBER, width=55, text_size=11),
@@ -1620,6 +1702,7 @@ class LinupApp:
             conn = self._get_conn()
             if not conn:
                 return
+            err_msg = None
             try:
                 for new_snum, entry in enumerate(session_fields, start=1):
                     date_str = str(entry['date_field'].value).strip()
@@ -1649,30 +1732,36 @@ class LinupApp:
                             (new_snum, date_str, mesa_val, bank_start, bank_end, profit, profit_pct, entry['sid']),
                         )
                 conn.commit()
-                dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
-                def close_dlg(ev2):
-                    dlg.open = False
-                    dlg.update()
-                    self.show_edit_sessions(investment_id, inv_name, inv_capital)
-                dlg.title = ft.Text("SESSIONS SAVED", color='#2ecc71', size=14, weight=ft.FontWeight.BOLD)
-                dlg.content = ft.Text("All changes saved successfully.", color=ft.Colors.WHITE)
-                dlg.actions = [ft.ElevatedButton("OK", on_click=close_dlg,
-                    style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE))]
-                dlg.actions_alignment = ft.MainAxisAlignment.CENTER
-                self.page.show_dialog(dlg)
             except Exception as ex:
+                err_msg = str(ex)
+            finally:
+                conn.close()
+
+            if err_msg:
                 dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
-                def close_dlg(ev2):
-                    dlg.open = False
-                    dlg.update()
+                def _ce(ev2): dlg.open = False; dlg.update()
                 dlg.title = ft.Text("ERROR", color='#ff4444', size=14, weight=ft.FontWeight.BOLD)
-                dlg.content = ft.Text(f"Save failed: {str(ex)}", color=ft.Colors.WHITE, size=11)
-                dlg.actions = [ft.ElevatedButton("OK", on_click=close_dlg,
+                dlg.content = ft.Text(f"Save failed: {err_msg}", color=ft.Colors.WHITE, size=11)
+                dlg.actions = [ft.ElevatedButton("OK", on_click=_ce,
                     style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE))]
                 dlg.actions_alignment = ft.MainAxisAlignment.CENTER
                 self.page.show_dialog(dlg)
-            finally:
-                conn.close()
+                return
+
+            # Recompute table_stats from compound_sessions on a fresh connection
+            self._recompute_table_stats(investment_id)
+
+            dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
+            def close_dlg(ev2):
+                dlg.open = False
+                dlg.update()
+                self.show_investment_dashboard(investment_id)
+            dlg.title = ft.Text("SESSIONS SAVED", color='#2ecc71', size=14, weight=ft.FontWeight.BOLD)
+            dlg.content = ft.Text("All changes saved successfully.", color=ft.Colors.WHITE)
+            dlg.actions = [ft.ElevatedButton("OK", on_click=close_dlg,
+                style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE))]
+            dlg.actions_alignment = ft.MainAxisAlignment.CENTER
+            self.page.show_dialog(dlg)
 
         def go_back(ev):
             self.show_investment_dashboard(investment_id)
@@ -3041,6 +3130,13 @@ class LinupApp:
                 pass
 
         def _on_bank_change(e):
+            try:
+                new_bank = float(self.banca_input.value or 0)
+                if new_bank > 0:
+                    self.banca_actual  = new_bank
+                    self.banca_inicial = new_bank
+            except ValueError:
+                pass
             _recalc_fin()
 
         self.max_loss_label = ft.Text(
@@ -5370,4 +5466,4 @@ def main(page: ft.Page):
     LinupApp(page)
 
 
-ft.app(main)
+ft.app(main, assets_dir="assets")
