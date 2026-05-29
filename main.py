@@ -1466,7 +1466,7 @@ class LinupApp:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT id, session_num, date, mesa, bank_start, bank_end, profit, profit_pct "
-                    "FROM compound_sessions WHERE investment_id=? ORDER BY id",
+                    "FROM compound_sessions WHERE investment_id=? ORDER BY session_num, id",
                     (investment_id,)
                 )
                 sessions = cursor.fetchall()
@@ -1475,122 +1475,180 @@ class LinupApp:
             finally:
                 conn.close()
 
-        # Store session data for editing: list of (id, session_num, date_field, mesa, bank_start_field, bank_end_field, profit_field)
-        session_rows_ui = []
-        session_fields = []  # (session_id, date_field, bank_start_field, bank_end_field, profit_field)
+        # Each entry: dict with sid (None = new), field widgets
+        session_fields = []
+        sessions_col = ft.Column(spacing=2)
+
+        def _build_row(entry):
+            def on_up(e, en=entry):
+                i = session_fields.index(en)
+                if i > 0:
+                    session_fields[i], session_fields[i - 1] = session_fields[i - 1], session_fields[i]
+                    _rebuild_col()
+
+            def on_down(e, en=entry):
+                i = session_fields.index(en)
+                if i < len(session_fields) - 1:
+                    session_fields[i], session_fields[i + 1] = session_fields[i + 1], session_fields[i]
+                    _rebuild_col()
+
+            def on_delete(e, en=entry):
+                if en['sid'] is None:
+                    session_fields.remove(en)
+                    _rebuild_col()
+                    return
+                dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
+                def confirm(ev2, en=en):
+                    conn2 = self._get_conn()
+                    if conn2:
+                        try:
+                            conn2.execute("DELETE FROM compound_sessions WHERE id=?", (en['sid'],))
+                            conn2.commit()
+                        except Exception:
+                            pass
+                        finally:
+                            conn2.close()
+                    session_fields.remove(en)
+                    dlg.open = False
+                    dlg.update()
+                    _rebuild_col()
+                def cancel(ev2):
+                    dlg.open = False
+                    dlg.update()
+                dlg.title = ft.Text("DELETE SESSION", color='#ff4444', size=14, weight=ft.FontWeight.BOLD)
+                dlg.content = ft.Text(
+                    f"Delete session ({entry['date_field'].value})?\nThis cannot be undone.",
+                    color=ft.Colors.WHITE, size=12,
+                )
+                dlg.actions = [
+                    ft.ElevatedButton("CANCEL", on_click=cancel, expand=1,
+                        style=ft.ButtonStyle(bgcolor='#555555', color=ft.Colors.WHITE)),
+                    ft.ElevatedButton("DELETE", on_click=confirm, expand=1,
+                        style=ft.ButtonStyle(bgcolor='#ff4444', color=ft.Colors.WHITE)),
+                ]
+                dlg.actions_alignment = ft.MainAxisAlignment.CENTER
+                self.page.show_dialog(dlg)
+
+            return ft.Row(controls=[
+                entry['date_field'],
+                entry['mesa_field'],
+                entry['bs_field'],
+                entry['be_field'],
+                entry['profit_field'],
+                ft.IconButton(ft.Icons.ARROW_UPWARD, on_click=on_up,
+                              icon_size=13, icon_color='#aaaaaa', width=28, height=36),
+                ft.IconButton(ft.Icons.ARROW_DOWNWARD, on_click=on_down,
+                              icon_size=13, icon_color='#aaaaaa', width=28, height=36),
+                ft.ElevatedButton(
+                    content=ft.Text("✕", size=13, weight=ft.FontWeight.BOLD,
+                                    text_align=ft.TextAlign.CENTER),
+                    on_click=on_delete, height=36, width=36,
+                    style=ft.ButtonStyle(
+                        bgcolor='#c0392b', color=ft.Colors.WHITE,
+                        padding=ft.padding.all(0),
+                    ),
+                ),
+            ], spacing=2, tight=True)
+
+        def _rebuild_col():
+            sessions_col.controls = [_build_row(e) for e in session_fields]
+            self.page.update()
+
+        def _wire_profit(entry):
+            """Attach on_change to bs/be fields so profit updates live."""
+            def _recalc(e, en=entry):
+                try:
+                    bs = float(en['bs_field'].value or 0)
+                except ValueError:
+                    bs = 0.0
+                try:
+                    be = float(en['be_field'].value or 0)
+                except ValueError:
+                    be = 0.0
+                en['profit_field'].value = str(round(be - bs, 2))
+                en['profit_field'].update()
+            entry['bs_field'].on_change = _recalc
+            entry['be_field'].on_change = _recalc
 
         for sid, snum, date_str, mesa, bs, be, prof, prof_pct in sessions:
-            date_field = ft.TextField(
-                value=date_str,
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=44,
-                width=75,
-                tooltip="Format: yy.mm.dd or dd/mm hh:mm",
+            entry = dict(
+                sid=sid,
+                date_field=ft.TextField(value=date_str, bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
+                                        height=36, width=75, text_size=11,
+                                        tooltip="Format: yy.mm.dd or dd/mm hh:mm"),
+                mesa_field=ft.TextField(value=mesa or '', bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
+                                        height=36, width=50, text_size=11),
+                bs_field=ft.TextField(value=str(round(bs, 2)), bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
+                                      height=36, keyboard_type=ft.KeyboardType.NUMBER, width=55, text_size=11),
+                be_field=ft.TextField(value=str(round(be, 2)), bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
+                                      height=36, keyboard_type=ft.KeyboardType.NUMBER, width=55, text_size=11),
+                profit_field=ft.TextField(value=str(round(prof, 2)), bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
+                                          height=36, width=55, text_size=11, read_only=True),
             )
-            mesa_label = ft.Text(mesa, color=ft.Colors.WHITE, width=50, size=10)
-            bs_field = ft.TextField(
-                value=str(round(bs, 2)),
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=44,
-                keyboard_type=ft.KeyboardType.NUMBER, width=55,
-            )
-            be_field = ft.TextField(
-                value=str(round(be, 2)),
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=44,
-                keyboard_type=ft.KeyboardType.NUMBER, width=55,
-            )
-            profit_field = ft.TextField(
-                value=str(round(prof, 2)),
-                bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=44,
-                keyboard_type=ft.KeyboardType.NUMBER, width=55,
-                read_only=True,
-            )
-            
-            session_fields.append((sid, date_field, bs_field, be_field, profit_field))
-            
-            # Delete button
-            def make_delete_handler(session_id, row_index):
-                def on_delete(ev):
-                    dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
-                    def confirm(ev2):
-                        conn2 = self._get_conn()
-                        if conn2:
-                            try:
-                                conn2.execute("DELETE FROM compound_sessions WHERE id=?", (session_id,))
-                                conn2.commit()
-                            except Exception:
-                                pass
-                            finally:
-                                conn2.close()
-                        dlg.open = False
-                        dlg.update()
-                        self.show_edit_sessions(investment_id, inv_name, inv_capital)
-                    
-                    def cancel(ev2):
-                        dlg.open = False
-                        dlg.update()
-                    
-                    dlg.title = ft.Text("DELETE SESSION", color='#ff4444',
-                                       size=14, weight=ft.FontWeight.BOLD)
-                    dlg.content = ft.Text(
-                        f"Delete session #{snum} ({date_str})?\nThis cannot be undone.",
-                        color=ft.Colors.WHITE, size=12,
-                    )
-                    dlg.actions = [
-                        ft.ElevatedButton(
-                            "CANCEL", on_click=cancel, expand=1,
-                            style=ft.ButtonStyle(bgcolor='#555555', color=ft.Colors.WHITE),
-                        ),
-                        ft.ElevatedButton(
-                            "DELETE", on_click=confirm, expand=1,
-                            style=ft.ButtonStyle(bgcolor='#ff4444', color=ft.Colors.WHITE),
-                        ),
-                    ]
-                    dlg.actions_alignment = ft.MainAxisAlignment.CENTER
-                    self.page.show_dialog(dlg)
-                return on_delete
+            _wire_profit(entry)
+            session_fields.append(entry)
 
-            delete_btn = ft.ElevatedButton(
-                "✕", on_click=make_delete_handler(sid, len(session_rows_ui)),
-                height=44, width=44,
-                style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE),
+        sessions_col.controls = [_build_row(e) for e in session_fields]
+
+        def on_add_session(ev):
+            import datetime
+            last_be = 0.0
+            if session_fields:
+                try:
+                    last_be = float(session_fields[-1]['be_field'].value or 0)
+                except ValueError:
+                    pass
+            today = datetime.date.today().strftime('%y.%m.%d')
+            entry = dict(
+                sid=None,
+                date_field=ft.TextField(value=today, bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
+                                        height=36, width=75, text_size=11),
+                mesa_field=ft.TextField(value='', bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
+                                        height=36, width=50, text_size=11),
+                bs_field=ft.TextField(value=str(round(last_be, 2)), bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
+                                      height=36, keyboard_type=ft.KeyboardType.NUMBER, width=55, text_size=11),
+                be_field=ft.TextField(value=str(round(last_be, 2)), bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
+                                      height=36, keyboard_type=ft.KeyboardType.NUMBER, width=55, text_size=11),
+                profit_field=ft.TextField(value='0.00', bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK,
+                                          height=36, width=55, text_size=11, read_only=True),
             )
-            
-            row = ft.Row(controls=[
-                ft.Text(str(snum), color=ft.Colors.WHITE, width=35, size=10),
-                date_field,
-                mesa_label,
-                bs_field,
-                be_field,
-                profit_field,
-                delete_btn,
-            ], spacing=2, tight=True)
-            session_rows_ui.append(row)
+            _wire_profit(entry)
+            session_fields.append(entry)
+            _rebuild_col()
 
         def on_save_all(ev):
-            """Save all edits and recalculate profits."""
             conn = self._get_conn()
             if not conn:
                 return
             try:
-                for sid, date_field, bs_field, be_field, profit_field in session_fields:
-                    date_str = str(date_field.value).strip()
+                for new_snum, entry in enumerate(session_fields, start=1):
+                    date_str = str(entry['date_field'].value).strip()
+                    mesa_val = str(entry['mesa_field'].value).strip()
                     try:
-                        bank_start = float(bs_field.value or 0)
+                        bank_start = float(entry['bs_field'].value or 0)
                     except ValueError:
                         bank_start = 0.0
                     try:
-                        bank_end = float(be_field.value or 0)
+                        bank_end = float(entry['be_field'].value or 0)
                     except ValueError:
                         bank_end = 0.0
-                    
                     profit = round(bank_end - bank_start, 2)
                     profit_pct = round((profit / bank_start * 100) if bank_start != 0 else 0, 2)
-                    
-                    conn.execute(
-                        "UPDATE compound_sessions SET date=?, bank_start=?, bank_end=?, profit=?, profit_pct=? WHERE id=?",
-                        (date_str, bank_start, bank_end, profit, profit_pct, sid)
-                    )
+                    if entry['sid'] is None:
+                        conn.execute(
+                            "INSERT INTO compound_sessions "
+                            "(investment_id, session_num, date, mesa, bank_start, bank_end, profit, profit_pct) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                            (investment_id, new_snum, date_str, mesa_val, bank_start, bank_end, profit, profit_pct),
+                        )
+                    else:
+                        conn.execute(
+                            "UPDATE compound_sessions "
+                            "SET session_num=?, date=?, mesa=?, bank_start=?, bank_end=?, profit=?, profit_pct=? "
+                            "WHERE id=?",
+                            (new_snum, date_str, mesa_val, bank_start, bank_end, profit, profit_pct, entry['sid']),
+                        )
                 conn.commit()
-                # Show success dialog
                 dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
                 def close_dlg(ev2):
                     dlg.open = False
@@ -1598,7 +1656,8 @@ class LinupApp:
                     self.show_edit_sessions(investment_id, inv_name, inv_capital)
                 dlg.title = ft.Text("SESSIONS SAVED", color='#2ecc71', size=14, weight=ft.FontWeight.BOLD)
                 dlg.content = ft.Text("All changes saved successfully.", color=ft.Colors.WHITE)
-                dlg.actions = [ft.ElevatedButton("OK", on_click=close_dlg, style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE))]
+                dlg.actions = [ft.ElevatedButton("OK", on_click=close_dlg,
+                    style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE))]
                 dlg.actions_alignment = ft.MainAxisAlignment.CENTER
                 self.page.show_dialog(dlg)
             except Exception as ex:
@@ -1608,7 +1667,8 @@ class LinupApp:
                     dlg.update()
                 dlg.title = ft.Text("ERROR", color='#ff4444', size=14, weight=ft.FontWeight.BOLD)
                 dlg.content = ft.Text(f"Save failed: {str(ex)}", color=ft.Colors.WHITE, size=11)
-                dlg.actions = [ft.ElevatedButton("OK", on_click=close_dlg, style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE))]
+                dlg.actions = [ft.ElevatedButton("OK", on_click=close_dlg,
+                    style=ft.ButtonStyle(bgcolor='#c0392b', color=ft.Colors.WHITE))]
                 dlg.actions_alignment = ft.MainAxisAlignment.CENTER
                 self.page.show_dialog(dlg)
             finally:
@@ -1617,45 +1677,39 @@ class LinupApp:
         def go_back(ev):
             self.show_investment_dashboard(investment_id)
 
-        # Header row
         header = ft.Row(controls=[
-            ft.Text("#", color='#7f8c8d', width=35, weight=ft.FontWeight.BOLD, size=9),
             ft.Text("DATE", color='#7f8c8d', width=75, weight=ft.FontWeight.BOLD, size=9),
             ft.Text("TABLE", color='#7f8c8d', width=50, weight=ft.FontWeight.BOLD, size=9),
             ft.Text("START $", color='#7f8c8d', width=55, weight=ft.FontWeight.BOLD, size=9),
             ft.Text("END $", color='#7f8c8d', width=55, weight=ft.FontWeight.BOLD, size=9),
             ft.Text("PROFIT", color='#7f8c8d', width=55, weight=ft.FontWeight.BOLD, size=9),
-            ft.Text("", color='#7f8c8d', width=32, weight=ft.FontWeight.BOLD, size=9),
+            ft.Text("", color='#7f8c8d', width=96, weight=ft.FontWeight.BOLD, size=9),
         ], spacing=2, tight=True)
 
         self._set_view(
             ft.Container(
                 bgcolor='#1a1a1a', expand=True, padding=20,
                 content=ft.ListView(expand=True, controls=[
-                    ft.ElevatedButton(
-                        "←  BACK", on_click=go_back,
-                        style=ft.ButtonStyle(bgcolor='#34495e', color=ft.Colors.WHITE),
-                    ),
+                    ft.ElevatedButton("←  BACK", on_click=go_back,
+                        style=ft.ButtonStyle(bgcolor='#34495e', color=ft.Colors.WHITE)),
                     ft.Container(height=12),
-                    ft.Text(
-                        f"{inv_name}  —  EDIT SESSIONS",
-                        color='#3498db', size=16, weight=ft.FontWeight.BOLD,
-                    ),
-                    ft.Text(
-                        f"Total sessions: {len(sessions)}  |  Base capital: ${inv_capital:.2f}",
-                        color='#7f8c8d', size=12,
-                    ),
+                    ft.Text(f"{inv_name}  —  EDIT SESSIONS",
+                        color='#3498db', size=16, weight=ft.FontWeight.BOLD),
+                    ft.Text(f"Total sessions: {len(sessions)}  |  Base capital: ${inv_capital:.2f}",
+                        color='#7f8c8d', size=12),
                     ft.Container(height=10),
                     ft.Divider(color='#333333', height=1),
                     header,
                     ft.Divider(color='#333333', height=1),
-                ] + session_rows_ui + [
+                    sessions_col,
                     ft.Container(height=10),
-                    ft.ElevatedButton(
-                        "SAVE ALL CHANGES", on_click=on_save_all,
+                    ft.ElevatedButton("+ ADD SESSION", on_click=on_add_session,
+                        height=44, expand=True,
+                        style=ft.ButtonStyle(bgcolor='#2980b9', color=ft.Colors.WHITE)),
+                    ft.Container(height=8),
+                    ft.ElevatedButton("SAVE ALL CHANGES", on_click=on_save_all,
                         height=50, expand=True,
-                        style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE),
-                    ),
+                        style=ft.ButtonStyle(bgcolor='#27ae60', color=ft.Colors.WHITE)),
                 ]),
             )
         )
@@ -2869,9 +2923,10 @@ class LinupApp:
             bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
             read_only=True,
         )
-        sug_bank     = self.banca_actual
-        sug_max_loss = 33.0    # default: 3 losses = 33% bank
-        sug_base_chip = 0.05   # default base chip for progression
+        sug_bank      = self.banca_actual
+        sug_max_loss  = 33.0    # default: 3 losses = 33% bank
+        sug_base_chip = 0.1    # default base chip for progression
+        capital       = getattr(self, 'inv_capital', 0.0)
 
         def _round_up_chip(val):
             if val <= 0:
@@ -2880,9 +2935,10 @@ class LinupApp:
                 return math.floor(round(val * 10, 8)) / 10
             return float(math.floor(val / 10) * 10)
 
-        # Initial calculations
-        sug_fin  = _round_up_chip(sug_bank * (sug_max_loss / 100) / 225)
-        sug_fout = sug_fin * 10
+        # Initial chip denominations: budget-derived, floored to base_chip
+        _sug_budget     = sug_bank * sug_max_loss / 100
+        _sug_chip_denom = max(_round_up_chip(_sug_budget / 90), sug_base_chip)
+        sug_fout        = max(_round_up_chip(_sug_budget / 18), sug_base_chip)
 
         def _f(val):
             try:
@@ -2891,43 +2947,58 @@ class LinupApp:
                 return 0.0
 
         def _chip_label_text_prog(base_chip, bank, max_loss_pct):
-            """Generate label for CHIP IN with fixed progression (1, 2, 3)."""
+            """CHIP IN label: progression breakdown then percentages."""
             try:
                 b = _f(base_chip)
-                # Fixed progression: 1x, 2x, 3x
                 total_1x = b * 15 * 1
                 total_2x = b * 15 * 2
                 total_3x = b * 15 * 3
-                total = total_1x + total_2x + total_3x
-                pct = (total / bank * 100) if bank > 0 else 0
-                return (f"({pct:.4f}% bank · 1x({total_1x:.2f}) + 2x({total_2x:.2f}) + 3x({total_3x:.2f}) = ${total:.2f})")
+                total    = total_1x + total_2x + total_3x
+                pct_bank = (total / bank * 100) if bank > 0 else 0
+                pct_cap  = (total / capital * 100) if capital > 0 else 0
+                return (f"1x({total_1x:.2f}) + 2x({total_2x:.2f}) + 3x({total_3x:.2f})"
+                        f" = ${total:.2f} · {pct_bank:.1f}% bank · {pct_cap:.1f}% capital")
             except Exception:
                 return ""
 
-        def _chip_label_text(chip_val, bank, multiplier_sum, max_loss_pct):
-            """chip_val × multiplier_sum = total 3-loss cost; % relative to bank"""
+        def _chip_label_text(chip_val, bank, max_loss_pct):
+            """CHIP OUT label: 2 chips at 1x·3x·5x breakdown then percentages."""
             try:
-                pct      = (chip_val / bank * 100) if bank > 0 else 0
-                loss     = chip_val * multiplier_sum
-                loss_pct = (loss / bank * 100) if bank > 0 else 0
-                return (f"({pct:.4f}% bank · 3 losses = ${loss:.2f}"
-                        f" = {loss_pct:.1f}% / {max_loss_pct:.0f}% bank)")
+                total_1x = chip_val * 2 * 1
+                total_3x = chip_val * 2 * 3
+                total_5x = chip_val * 2 * 5
+                total    = total_1x + total_3x + total_5x   # chip_val × 18
+                pct_bank = (total / bank * 100) if bank > 0 else 0
+                pct_cap  = (total / capital * 100) if capital > 0 else 0
+                return (f"1x({total_1x:.2f}) + 3x({total_3x:.2f}) + 5x({total_5x:.2f})"
+                        f" = ${total:.2f} · {pct_bank:.1f}% bank · {pct_cap:.1f}% capital")
             except Exception:
                 return ""
 
         self.fin_label  = ft.Text(
-            f"CHIP IN {_chip_label_text_prog(sug_base_chip, sug_bank, sug_max_loss)}:",
-            color=ft.Colors.WHITE,
+            _chip_label_text_prog(_sug_chip_denom, sug_bank, sug_max_loss),
+            color='#27ae60',
         )
         self.fout_label = ft.Text(
-            f"CHIP OUT {_chip_label_text(sug_fout, sug_bank, 26,  sug_max_loss)}:",
-            color=ft.Colors.WHITE,
+            _chip_label_text(sug_fout, sug_bank, sug_max_loss),
+            color='#f1c40f',
         )
 
-        def _refresh_labels(bank, base_chip_val, fout_val):
-            self.fin_label.value  = f"CHIP IN {_chip_label_text_prog(base_chip_val, bank, _f(self.max_loss_input.value))}:"
-            self.fout_label.value = f"CHIP OUT {_chip_label_text(fout_val, bank, 26, _f(self.max_loss_input.value))}:"
+        def _max_loss_info(bank, max_loss_pct):
             try:
+                loss_amt = bank * max_loss_pct / 100
+                cap_pct  = (loss_amt / capital * 100) if capital > 0 else 0
+                return f"MAX LOSS %:  (= ${loss_amt:.2f} · {cap_pct:.1f}% of capital)"
+            except Exception:
+                return "MAX LOSS %:"
+
+        def _refresh_labels(bank, base_chip_val, fout_val):
+            ml = _f(self.max_loss_input.value)
+            self.max_loss_label.value = _max_loss_info(bank, ml)
+            self.fin_label.value  = _chip_label_text_prog(base_chip_val, bank, ml)
+            self.fout_label.value = _chip_label_text(fout_val, bank, ml)
+            try:
+                self.max_loss_label.update()
                 self.fin_label.update()
                 self.fout_label.update()
             except Exception:
@@ -2940,49 +3011,47 @@ class LinupApp:
             return b * 15 * 1 + b * 15 * 2 + b * 15 * 3
 
         def _recalc_fin(e=None):
-            """Recalculate CHIP IN (same pattern as CHIP OUT)"""
+            """Derive chip denomination from max_loss budget, floored to base_chip."""
             try:
-                bk = _f(self.banca_input.value)
+                bk   = _f(self.banca_input.value)
                 base = _f(self.fin_base_input.value)
-                
-                total = _chips_from_progression(base)
-                fin_val = _round_up_chip(total)
-                self.fin_input.value = str(fin_val)
-                self.fin_input.update()
-                
-                _refresh_labels(bk, base, _f(self.fout_input.value))
-            except Exception:
-                pass
+                ml   = _f(self.max_loss_input.value)
 
-        def _recalc_fout(e=None):
-            """Recalculate CHIP OUT (keep same formula)"""
-            try:
-                bk  = _f(self.banca_input.value)
-                ml  = _f(self.max_loss_input.value)
-                factor = bk * max(ml, 0) / 100
-                fout_val = _round_up_chip(factor / 18)  # 18 = 2*(1+3+5)
+                budget = bk * max(ml, 0) / 100
+
+                # CHIP IN: 90 total chips (15×1 + 15×2 + 15×3)
+                ideal_fin  = budget / 90 if bk > 0 else base
+                chip_denom = _round_up_chip(ideal_fin)
+                if base > 0:
+                    chip_denom = max(chip_denom, base)
+
+                # CHIP OUT: 18 total chips (2×1 + 2×3 + 2×5)
+                ideal_fout = budget / 18 if bk > 0 else base
+                fout_val   = _round_up_chip(ideal_fout)
+                if base > 0:
+                    fout_val = max(fout_val, base)
+
+                self.fin_input.value  = str(chip_denom)
                 self.fout_input.value = str(fout_val)
-                self.fout_input.update()
-                
-                # Also recalculate CHIP IN
-                base = _f(self.fin_base_input.value)
-                total_fin = _chips_from_progression(base)
-                self.fin_input.value = str(total_fin)
                 self.fin_input.update()
-                
-                _refresh_labels(bk, base, fout_val)
+                self.fout_input.update()
+
+                _refresh_labels(bk, chip_denom, fout_val)
             except Exception:
                 pass
 
         def _on_bank_change(e):
-            _recalc_fout()
             _recalc_fin()
 
+        self.max_loss_label = ft.Text(
+            _max_loss_info(sug_bank, sug_max_loss),
+            color='#e74c3c',
+        )
         self.max_loss_input = ft.TextField(
             value=str(sug_max_loss),
-            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+            bgcolor='#f1948a', color=ft.Colors.BLACK, height=45,
             keyboard_type=ft.KeyboardType.NUMBER,
-            on_change=lambda e: (_recalc_fout(), _recalc_fin()),
+            on_change=lambda e: _recalc_fin(),
         )
 
         # CHIP IN Base Chip control
@@ -2993,17 +3062,15 @@ class LinupApp:
             on_change=_recalc_fin,
         )
 
-        sug_fin_total = _round_up_chip(_chips_from_progression(sug_base_chip))
-
         self.fin_input = ft.TextField(
-            value=str(sug_fin_total),
-            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+            value=str(_sug_chip_denom),
+            bgcolor='#82e0aa', color=ft.Colors.BLACK, height=45,
             keyboard_type=ft.KeyboardType.NUMBER,
             read_only=True,
         )
         self.fout_input = ft.TextField(
             value=str(sug_fout),
-            bgcolor=ft.Colors.WHITE, color=ft.Colors.BLACK, height=45,
+            bgcolor='#fef9e7', color=ft.Colors.BLACK, height=45,
             keyboard_type=ft.KeyboardType.NUMBER,
             on_change=lambda _e: _refresh_labels(
                 _f(self.banca_input.value),
@@ -3112,14 +3179,16 @@ class LinupApp:
                         ),
                         ft.Text("BANK:", color=ft.Colors.WHITE),
                         self.banca_input,
-                        ft.Text("MAX LOSS %:", color=ft.Colors.WHITE),
-                        self.max_loss_input,
-                        ft.Text("CHIP IN — PROGRESSION (1x, 2x, 3x)", color='#27ae60', size=12,
-                                weight=ft.FontWeight.BOLD),
                         ft.Text("Base Chip:", color='#7f8c8d', size=11),
                         self.fin_base_input,
+                        self.max_loss_label,
+                        self.max_loss_input,
+                        ft.Text("CHIP IN — investment of 15 chips (1x · 2x · 3x)", color='#27ae60', size=12,
+                                weight=ft.FontWeight.BOLD),
                         self.fin_label,
                         self.fin_input,
+                        ft.Text("CHIP OUT — 2 chips · progression (1x · 3x · 5x)", color='#f1c40f', size=12,
+                                weight=ft.FontWeight.BOLD),
                         self.fout_label,
                         self.fout_input,
                         ft.Container(height=10),
@@ -3873,6 +3942,37 @@ class LinupApp:
             return self.val_fin * len(GRUPOS_MAESTROS[g])
         return self.val_fout
 
+    def _progression_for_N(self, N: int) -> list:
+        """
+        Build chip progression for N numbers played.
+        Rule: iterate n=1,2,3,... Include n if GR > 0, skip if GR <= 0.
+        Acum only accumulates from included steps.
+        GR = n * val_fin * (36-N) - acum
+        """
+        chip = self.val_fin
+        if N <= 0 or chip <= 0 or N >= 36:
+            return list(range(1, 21))
+        margin_per_chip = chip * (36 - N)
+        if margin_per_chip <= 0:
+            return list(range(1, 21))
+        progression, acum, n = [], 0.0, 1
+        while len(progression) < 20 and n <= 1000:
+            gr = n * margin_per_chip - acum
+            if gr > 0:
+                progression.append(n)
+                acum += n * chip * N
+            n += 1
+        return progression or [1]
+
+    def _sniper_inside_multi(self, N: int) -> int:
+        """Chip multiplier for the current inside-sniper progression level."""
+        if not self.prog_on:
+            return self.fixed_multi
+        n_groups = len(self.grupos_activos)
+        level = self.idx_fibo_in if n_groups == 1 else self.nivel_martingala_in
+        prog  = self._progression_for_N(N)
+        return prog[min(level, len(prog) - 1)]
+
     def _current_multi(self, is_out: bool) -> int:
         """Return per-group multiplier.
         For outside n>1 with prog ON, PROG_2_OUT stores TOTAL chips, so we
@@ -3884,10 +3984,11 @@ class LinupApp:
             if n == 1:
                 return PROG_FIBO[self.idx_fibo_out]
             idx = min(self.nivel_martingala_out, len(self.PROG_2_OUT) - 1)
-            return self.PROG_2_OUT[idx] // max(n, 1)   # per-group: [1,3,9,27] for n=2
+            return self.PROG_2_OUT[idx] // max(n, 1)
+        # Non-sniper inside fallback: linear
         if n == 1:
-            return PROG_FIBO[self.idx_fibo_in]
-        return self.PROG_2_IN[min(self.nivel_martingala_in, len(self.PROG_2_IN) - 1)]
+            return self.idx_fibo_in + 1
+        return self.nivel_martingala_in + 1
 
     def _compute_bet(self):
         n = len(self.grupos_activos)
@@ -3934,31 +4035,19 @@ class LinupApp:
             multi_in = self._current_multi(is_out=False)
             
             if self.sniper_mode:
-                # Sniper ON: use intersection count
-                # Use _compute_intersection() which correctly handles type-aware grouping:
-                # - Sectors (Z0, ZG, ZP, H) are unioned within type
-                # - Thirds (T1, T2, T3) are unioned within type  
-                # - Waves (W1, W2, W3) are unioned within type
-                # - Then all types are intersected together
                 intersection = self._compute_intersection()
-                
                 num_chips = len(intersection) if intersection else 1
+                if self.prog_on:
+                    multi_in = self._sniper_inside_multi(num_chips)
                 total = self.val_fin * num_chips * multi_in
                 win_payout = self.val_fin * 36 * multi_in
-                # DEBUG
-                print(f"DEBUG _compute_bet (inside, sniper ON): grupos={self.grupos_activos}, intersection={len(intersection) if intersection else 0}, num_chips={num_chips}, val_fin={self.val_fin}, multi_in={multi_in}, total={total}")
             else:
                 # Sniper OFF: use sum of safety levels (total chips wagered)
                 safety_levels = self._compute_safety_levels()
                 # Only count numbers that are covered (safety level > 0)
                 num_chips = sum(v for v in safety_levels.values() if v > 0) if safety_levels else 1
-                # For payout: we hit one number at some multiplier
-                # Payout = 36 × val_fin × multi (worst case, highest multiplier)
-                # But total cost = num_chips × val_fin × multi
                 total = self.val_fin * num_chips * multi_in
                 win_payout = self.val_fin * 36 * multi_in
-                # DEBUG
-                print(f"DEBUG _compute_bet (inside, sniper OFF): num_chips={num_chips}, val_fin={self.val_fin}, multi_in={multi_in}, total={total}")
         
         return total, win_payout, num_chips
 
@@ -4391,28 +4480,31 @@ class LinupApp:
             dlg.update()
             on_ready_cb()
 
+        _chip_lbl = ft.Text(
+            f"${chip_per_num:.2f}/num",
+            color='#f1c40f', size=13,
+            weight=ft.FontWeight.BOLD,
+            text_align=ft.TextAlign.CENTER,
+        )
         dlg.title = ft.Column(
             tight=True,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 ft.Row(
+                    wrap=True,
                     alignment=ft.MainAxisAlignment.CENTER,
-                    controls=title_chips + [ft.Container(width=6)] + [
-                        ft.Text(f"${chip_per_num:.2f}/num",
-                                color='#f1c40f', size=13,
-                                weight=ft.FontWeight.BOLD),
-                    ],
+                    controls=title_chips,
                 ),
+                _chip_lbl,
             ],
         )
-        
+
         # For outside bets: show only total (no breakdown)
         _total_lbl = ft.Text(
             f"Total: ${total_cost:.2f}",
             color='#ecf0f1', size=12, weight=ft.FontWeight.BOLD,
             text_align=ft.TextAlign.CENTER,
         )
-        _chip_lbl = dlg.title.controls[0].controls[-1]  # the $/num text in title row
 
         # When progression is OFF, show live multiplier picker inside the popup
         popup_extra: list = []
@@ -4559,30 +4651,29 @@ class LinupApp:
     
     def _show_inside_bet_popup(self, on_ready_cb):
         """Show popup with roulette grid and outside betting table for inside bets."""
-        multi        = self._current_multi(is_out=False)
-        chip_per_num = self.val_fin * multi
-
-        # Sniper mode: smart intersection across group types, union within types.
-        # When sniper OFF on inside bets: show all numbers from all groups (fallback view)
         intersection = self._compute_intersection()
-        
+
         if self.sniper_mode:
-            # Sniper ON: show only intersection
-            all_nums = intersection
+            all_nums    = intersection
             safety_levels = {n: 1 for n in all_nums}
-            total_chips = len(all_nums)  # Each number is in 1 "slot" (the intersection)
+            total_chips = len(all_nums)
         else:
-            # Sniper OFF: show all numbers from all groups with safety levels
             all_nums: set = set()
             for g in self.grupos_activos:
                 if g in GRUPOS_MAESTROS:
                     all_nums |= GRUPOS_MAESTROS[g]
             safety_levels = self._compute_safety_levels()
-            total_chips = sum(v for v in safety_levels.values() if v > 0)  # Sum of covered numbers only
+            total_chips = sum(v for v in safety_levels.values() if v > 0)
             max_safety = max((v for v in safety_levels.values() if v > 0), default=0)
-        
-        # Calculate total cost based on total chips
-        total_cost = total_chips * chip_per_num
+
+        # Sniper ON: use GR-based progression for the intersection count
+        if self.sniper_mode and self.prog_on and total_chips > 0:
+            multi = self._sniper_inside_multi(total_chips)
+        else:
+            multi = self._current_multi(is_out=False)
+
+        chip_per_num = self.val_fin * multi
+        total_cost   = total_chips * chip_per_num
 
         def grp_color(g):
             if g in {'Z0', 'ZG', 'ZP', 'H'}:                   return C_SEC
@@ -4768,28 +4859,31 @@ class LinupApp:
             dlg.update()
             on_ready_cb()
 
+        _chip_lbl = ft.Text(
+            f"${chip_per_num:.2f}/num",
+            color='#f1c40f', size=13,
+            weight=ft.FontWeight.BOLD,
+            text_align=ft.TextAlign.CENTER,
+        )
         dlg.title = ft.Column(
             tight=True,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 ft.Row(
+                    wrap=True,
                     alignment=ft.MainAxisAlignment.CENTER,
-                    controls=title_chips + [ft.Container(width=6)] + [
-                        ft.Text(f"${chip_per_num:.2f}/num",
-                                color='#f1c40f', size=13,
-                                weight=ft.FontWeight.BOLD),
-                    ],
+                    controls=title_chips,
                 ),
+                _chip_lbl,
             ],
         )
-        
+
         # For inside bets: show total + breakdown with total chips count
         _total_lbl = ft.Text(
             f"Total: ${total_cost:.2f}  ({total_chips} × ${chip_per_num:.2f})",
             color='#ecf0f1', size=12, weight=ft.FontWeight.BOLD,
             text_align=ft.TextAlign.CENTER,
         )
-        _chip_lbl = dlg.title.controls[0].controls[-1]  # the $/num text in title row
 
         # Multiplier picker - always show, but enabled only when progression is OFF
         _pmx_refs: dict = {}
@@ -5204,12 +5298,12 @@ class LinupApp:
             if is_simple_outside:
                 self.lbl_inv.value = f"BET: ${total:.2f}"
             else:
-                # Inside bets: show chip breakdown (using num_chips calculated in _compute_bet)
-                chip_val  = self.val_fin
-                
-                # DEBUG
-                print(f"DEBUG update_inv_label: grupos={self.grupos_activos}, sniper={self.sniper_mode}, num_chips={num_chips}, chip_val={chip_val}, multi={multi}, total={total}")
-                
+                # Inside bets: show chip breakdown with actual per-number cost
+                if self.sniper_mode and self.prog_on and num_chips > 0:
+                    effective_multi = self._sniper_inside_multi(num_chips)
+                else:
+                    effective_multi = multi
+                chip_val = self.val_fin * effective_multi
                 prog_tag = "" if self.prog_on else f" [{multi}x]"
                 self.lbl_inv.value = f"BET: ${total:.2f} ({num_chips}x${chip_val:.4g}){prog_tag}"
         else:
