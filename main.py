@@ -113,7 +113,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v18.1.0"
+        self.page.title      = "Linup v18.1.1"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -582,7 +582,7 @@ class LinupApp:
                         ft.Container(height=16),
                         ft.Image(src="roulette.gif", width=200, height=200),
                         ft.Container(height=16),
-                        ft.Text("v18.1.0", color='#7f8c8d', size=18),
+                        ft.Text("v18.1.1", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -2393,12 +2393,13 @@ class LinupApp:
                 
                 # Sessions table
                 writer.writerow(["SESSION DETAILS"])
-                writer.writerow(["Operation #", "Return %", "Capital Start", "P/L", "Capital End", "Cumulative %"])
-                
+                writer.writerow(["Date", "Operation #", "Return %", "Capital Start", "P/L", "Capital End", "Cumulative %"])
+
                 cumul_pct = 0
                 for idx, (ret_pct, bank_start, bank_end, profit_amt, date_str) in enumerate(session_data):
                     cumul_pct += ret_pct
                     writer.writerow([
+                        date_str or "",
                         idx + 1,
                         f"{ret_pct:.2f}",
                         f"{bank_start:.2f}",
@@ -2686,12 +2687,13 @@ class LinupApp:
             
             # Session Details
             story.append(Paragraph("Session Details", kpi_title))
-            session_data_table = [["Op#", "Return %", "Start", "P/L", "End", "Cumul %"]]
-            
+            session_data_table = [["Date", "Op#", "Return %", "Start", "P/L", "End", "Cumul %"]]
+
             cumul_pct = 0
             for idx, (ret_pct, bank_start, bank_end, profit_amt, date_str) in enumerate(session_data):
                 cumul_pct += ret_pct
                 session_data_table.append([
+                    date_str or "",
                     str(idx + 1),
                     f"{ret_pct:.2f}",
                     f"{bank_start:.2f}",
@@ -2699,8 +2701,8 @@ class LinupApp:
                     f"{bank_end:.2f}",
                     f"{cumul_pct:.2f}",
                 ])
-            
-            session_table = Table(session_data_table, colWidths=[0.6*inch, 1*inch, 1.2*inch, 1*inch, 1.2*inch, 1*inch])
+
+            session_table = Table(session_data_table, colWidths=[1.0*inch, 0.5*inch, 0.8*inch, 1.0*inch, 0.8*inch, 1.0*inch, 0.9*inch])
             
             # Build table style with conditional row coloring
             table_style = [
@@ -2717,7 +2719,7 @@ class LinupApp:
             
             # Add conditional row coloring
             for row_idx in range(1, len(session_data_table)):
-                ret_pct = float(session_data_table[row_idx][1])
+                ret_pct = float(session_data_table[row_idx][2])
                 if ret_pct > 0:
                     bg_color = colors.HexColor('#d5f4e6')  # Light green
                 else:
