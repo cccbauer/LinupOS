@@ -113,7 +113,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v18.1.1"
+        self.page.title      = "Linup v18.1.2"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -582,7 +582,7 @@ class LinupApp:
                         ft.Container(height=16),
                         ft.Image(src="roulette.gif", width=200, height=200),
                         ft.Container(height=16),
-                        ft.Text("v18.1.1", color='#7f8c8d', size=18),
+                        ft.Text("v18.1.2", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -3116,11 +3116,11 @@ class LinupApp:
                 if base > 0:
                     chip_denom = max(chip_denom, base)
 
-                # CHIP OUT: 18 total chips (2×1 + 2×3 + 2×5)
+                # CHIP OUT: 18 total chips (2×1 + 2×3 + 2×5), snapped to base chip multiple
                 ideal_fout = budget / 18 if bk > 0 else base
                 fout_val   = _round_up_chip(ideal_fout)
                 if base > 0:
-                    fout_val = max(fout_val, base)
+                    fout_val = max(math.floor(round(fout_val / base, 8)) * base, base)
 
                 self.fin_input.value  = str(chip_denom)
                 self.fout_input.value = str(fout_val)
@@ -3168,7 +3168,7 @@ class LinupApp:
         )
         self.fout_input = ft.TextField(
             value=str(sug_fout),
-            bgcolor='#fef9e7', color=ft.Colors.BLACK, height=45,
+            bgcolor='#f7dc6f', color=ft.Colors.BLACK, height=45,
             keyboard_type=ft.KeyboardType.NUMBER,
             on_change=lambda _e: _refresh_labels(
                 _f(self.banca_input.value),
