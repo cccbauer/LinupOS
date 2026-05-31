@@ -164,7 +164,7 @@ class LinupApp:
         self.page.run_task(self._after_splash)
 
     async def _after_splash(self):
-        await asyncio.sleep(2.0)
+        await asyncio.sleep(4.0)
         self.show_main_menu()
 
     # ──────────────────────────────────────────────────────────────────
