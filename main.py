@@ -113,7 +113,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v18.1.2"
+        self.page.title      = "Linup v18.1.3"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -582,7 +582,7 @@ class LinupApp:
                         ft.Container(height=16),
                         ft.Image(src="roulette.gif", width=200, height=200),
                         ft.Container(height=16),
-                        ft.Text("v18.1.2", color='#7f8c8d', size=18),
+                        ft.Text("v18.1.3", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -3015,7 +3015,7 @@ class LinupApp:
             read_only=True,
         )
         sug_bank      = self.banca_actual
-        sug_max_loss  = 33.0    # default: 3 losses = 33% bank
+        sug_max_loss  = getattr(self, 'last_max_loss', 33.0)
         sug_base_chip = 0.1    # default base chip for progression
         capital       = getattr(self, 'inv_capital', 0.0)
 
@@ -3326,6 +3326,7 @@ class LinupApp:
             # CHIP IN is calculated from progression
             self.val_fin       = float(self.fin_input.value)  if self.fin_input.value  else 0.5
             self.val_fout      = float(self.fout_input.value) if self.fout_input.value else 0.5
+            self.last_max_loss = float(self.max_loss_input.value) if self.max_loss_input.value else 33.0
         except Exception:
             pass
         # Read column visibility checkboxes
@@ -4131,7 +4132,7 @@ class LinupApp:
         else:
             # Mixed types or 3+ groups = inside bet
             multi_in = self._current_multi(is_out=False)
-            
+
             if self.sniper_mode:
                 intersection = self._compute_intersection()
                 num_chips = len(intersection) if intersection else 1
@@ -4478,7 +4479,7 @@ class LinupApp:
         """Show popup with full table: outside field buttons highlighted yellow, NO grid highlighting."""
         total_cost, _, _ = self._compute_bet()
         multi        = self._current_multi(is_out=True)
-        chip_per_num = self.val_fin * multi
+        chip_per_num = self.val_fout * multi
         
         def grp_color(g):
             if g in {'Z0', 'ZG', 'ZP', 'H'}:                   return C_SEC
@@ -4612,7 +4613,7 @@ class LinupApp:
             def _make_pmx(mx):
                 def handler(_ev):
                     self.fixed_multi = mx
-                    _c  = self.val_fin * mx
+                    _c  = _outside_chip * mx
                     _t  = len(self.grupos_activos) * _c  # num groups × chip_per_group
                     _chip_lbl.value  = f"${_c:.2f}/num"
                     _total_lbl.value = f"Total: ${_t:.2f}"
