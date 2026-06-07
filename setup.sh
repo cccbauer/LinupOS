@@ -48,7 +48,7 @@ source venv/bin/activate
 # ── 3. Dependencies ─────────────────────────────────────────────────
 hdr "[3/5] Dependencies"
 pip install --upgrade pip -q
-pip install "flet>=0.25.0" "reportlab>=4.0.0" "Pillow>=10.0.0" -q
+pip install "flet==0.80.5" "reportlab>=4.0.0" "Pillow>=10.0.0" -q
 ok "flet       $(pip show flet       2>/dev/null | grep ^Version | cut -d' ' -f2)"
 ok "reportlab  $(pip show reportlab  2>/dev/null | grep ^Version | cut -d' ' -f2)"
 ok "Pillow     $(pip show Pillow     2>/dev/null | grep ^Version | cut -d' ' -f2)"
