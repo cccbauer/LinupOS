@@ -478,6 +478,7 @@ class LinupApp:
         self.last_prog_state      = True   # was progression on when last bet resolved
         self.last_bank_delta      = 0.0
         self.stop_loss_triggered  = False
+        self.goal_achieved_shown  = False
         self.activa               = False
         self.free_spin_mode       = False
         self.live_table_mode      = False
@@ -3597,6 +3598,77 @@ class LinupApp:
         self.page.show_dialog(dlg)
 
     # ─────────────────────────────────────────────────────────────────
+    # GOAL ACHIEVED — profit reached the MAX LOSS target (turned positive)
+    # ─────────────────────────────────────────────────────────────────
+    def _check_goal_achieved(self):
+        if self.goal_achieved_shown or self.stop_loss_triggered:
+            return
+        if self.banca_inicial <= 0:
+            return
+        profit_pct = (self.banca_actual - self.banca_inicial) / self.banca_inicial
+        goal_pct = getattr(self, 'last_max_loss', 2.0) / 100
+        if profit_pct < goal_pct:
+            return
+
+        self.goal_achieved_shown = True
+
+        profit = round(self.banca_actual - self.banca_inicial, 2)
+        pl_pct = profit_pct * 100
+
+        dlg = ft.AlertDialog(modal=True, bgcolor='#1e1e1e')
+
+        def exit_and_save(ev):
+            dlg.open = False
+            dlg.update()
+            self.finalizar_sesion()
+
+        def keep_playing(ev):
+            dlg.open = False
+            dlg.update()
+
+        dlg.title = ft.Text(
+            "CONGRATULATIONS",
+            color='#2ecc71', size=18, weight=ft.FontWeight.BOLD,
+            text_align=ft.TextAlign.CENTER,
+        )
+        dlg.content = ft.Column(
+            tight=True,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Divider(color='#444444'),
+                ft.Text("Goal achieved!", color='#2ecc71',
+                        size=15, weight=ft.FontWeight.BOLD,
+                        text_align=ft.TextAlign.CENTER),
+                ft.Container(height=6),
+                ft.Text(f"Target:  +{goal_pct*100:.1f}%",
+                        color=ft.Colors.WHITE, size=14),
+                ft.Text(f"Current: +{pl_pct:.1f}%",
+                        color='#2ecc71', size=14, weight=ft.FontWeight.BOLD),
+                ft.Container(height=4),
+                ft.Text(f"Profit:  {self._fmt_bank(profit)}",
+                        color='#2ecc71', size=20, weight=ft.FontWeight.BOLD),
+                ft.Container(height=10),
+                ft.Text("It's recommended to exit while ahead.",
+                        color='#f39c12', size=12, italic=True,
+                        text_align=ft.TextAlign.CENTER),
+            ],
+        )
+        dlg.actions = [
+            ft.ElevatedButton(
+                content=ft.Text("EXIT & SAVE", size=14, weight=ft.FontWeight.BOLD),
+                on_click=exit_and_save, expand=1,
+                style=ft.ButtonStyle(bgcolor='#2ecc71', color=ft.Colors.WHITE),
+            ),
+            ft.ElevatedButton(
+                content=ft.Text("CONTINUE", size=14, weight=ft.FontWeight.BOLD),
+                on_click=keep_playing, expand=1,
+                style=ft.ButtonStyle(bgcolor='#f39c12', color=ft.Colors.WHITE),
+            ),
+        ]
+        dlg.actions_alignment = ft.MainAxisAlignment.CENTER
+        self.page.show_dialog(dlg)
+
+    # ─────────────────────────────────────────────────────────────────
     # FINALIZE SESSION
     # ─────────────────────────────────────────────────────────────────
     def finalizar_sesion(self, e=None):
@@ -5622,6 +5694,7 @@ class LinupApp:
             self.lbl_inv_pl.color = '#2ecc71' if total_pl >= 0 else '#ff4444'
         self.page.update()
         self._check_stop_loss()
+        self._check_goal_achieved()
 
     def corregir_ultimo(self, e=None):
         # First press while bet is active: cancel the pending bet, restore display
