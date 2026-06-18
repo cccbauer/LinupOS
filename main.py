@@ -113,7 +113,7 @@ class LinupApp:
         self.current_investment_id = None
         self.lbl_inv_pl = None
 
-        self.page.title      = "Linup v18.1.5"
+        self.page.title      = "Linup v18.1.6"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor    = '#1a1a1a'
         self.page.padding    = 0
@@ -582,7 +582,7 @@ class LinupApp:
                         ft.Container(height=16),
                         ft.Image(src="roulette.gif", width=200, height=200),
                         ft.Container(height=16),
-                        ft.Text("v18.1.5", color='#7f8c8d', size=18),
+                        ft.Text("v18.1.6", color='#7f8c8d', size=18),
                         ft.Container(height=48),
                         ft.ProgressRing(color='#3498db', width=36, height=36,
                                         stroke_width=3),
@@ -5288,20 +5288,23 @@ class LinupApp:
         return types_used <= 1
 
     def _proceed_bet(self):
-        self._check_pre_bet_warning(self._activate_bet)
+        # Warning first, then the chip/table setup popup, then activate the bet.
+        self._check_pre_bet_warning(
+            lambda: self._show_roulette_chip_popup(self._activate_bet)
+        )
 
     def confirmar_manual(self, e=None):
         if not self.grupos_activos:
             return
-        # Show comprehensive popup for ALL bet types
-        self._show_roulette_chip_popup(self._proceed_bet)
+        # Warning popup before the chip/table setup popup
+        self._proceed_bet()
 
     def auto_invertir_sug(self, grupos):
         self.limpiar_seleccion_visual()
         self.grupos_activos = list(grupos)
         self._refresh_mixer_colors()
-        # Show comprehensive popup for suggested bets too
-        self._show_roulette_chip_popup(self._proceed_bet)
+        # Warning popup before the chip/table setup popup
+        self._proceed_bet()
 
     # ──────────────────────────────────────────────────────────────────
     # SUGGESTIONS
