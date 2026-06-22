@@ -288,6 +288,8 @@ class LinupApp:
                     "ALTER TABLE investment_tables ADD COLUMN token_balance REAL DEFAULT 0",
                     "ALTER TABLE investment_tables ADD COLUMN token_price REAL DEFAULT 0",
                     "ALTER TABLE investment_tables ADD COLUMN chips_per_token REAL DEFAULT 0",
+                    # Per-table base chip, remembered from the last setup on that table
+                    "ALTER TABLE table_stats ADD COLUMN base_chip REAL DEFAULT 0",
                 ]:
                     try:
                         conn.execute(_col)
@@ -421,6 +423,42 @@ class LinupApp:
                 "ON CONFLICT(investment_id, mesa) DO UPDATE SET "
                 "wins=wins+?, losses=losses+?, last_bank=?",
                 (inv, self.nombre_mesa, w, l, bk, w, l, bk)
+            )
+            conn.commit()
+        except Exception:
+            pass
+        finally:
+            conn.close()
+
+    def _load_base_chip(self, investment_id, mesa, default=0.1):
+        """Return the base chip last saved for this (investment, table), or default."""
+        conn = self._get_conn()
+        if not conn:
+            return default
+        try:
+            row = conn.execute(
+                "SELECT base_chip FROM table_stats WHERE investment_id=? AND mesa=?",
+                (investment_id or 0, str(mesa))
+            ).fetchone()
+            if row and row[0] and float(row[0]) > 0:
+                return float(row[0])
+        except Exception:
+            pass
+        finally:
+            conn.close()
+        return default
+
+    def _save_base_chip(self, investment_id, mesa, base_chip):
+        """Persist the base chip for this (investment, table) so it's remembered."""
+        conn = self._get_conn()
+        if not conn:
+            return
+        try:
+            conn.execute(
+                "INSERT INTO table_stats (investment_id, mesa, base_chip) "
+                "VALUES (?, ?, ?) "
+                "ON CONFLICT(investment_id, mesa) DO UPDATE SET base_chip=?",
+                (investment_id or 0, str(mesa), float(base_chip), float(base_chip))
             )
             conn.commit()
         except Exception:
@@ -3127,7 +3165,11 @@ class LinupApp:
         )
         sug_bank      = self.banca_actual
         sug_max_loss  = getattr(self, 'last_max_loss', 2.0)
-        sug_base_chip = getattr(self, 'last_base_chip', 0.1)  # remembered base chip from last setup
+        # Per-table base chip: remembered from the last setup on THIS table,
+        # falling back to the last-used chip in memory, then 0.1.
+        sug_base_chip = self._load_base_chip(
+            getattr(self, 'current_investment_id', 0), self.nombre_mesa,
+            default=getattr(self, 'last_base_chip', 0.1))
         capital       = getattr(self, 'inv_capital', 0.0)
         # For CHIPS investments the bank, budget and capital are all in CHIPS,
         # so the percentages stay in one unit. We show the USD equivalent in
@@ -3521,6 +3563,9 @@ class LinupApp:
             self.val_fout      = float(self.fout_input.value) if self.fout_input.value else 0.5
             self.last_max_loss = float(self.max_loss_input.value) if self.max_loss_input.value else 2.0
             self.last_base_chip = float(self.fin_base_input.value) if self.fin_base_input.value else 0.1
+            # Remember this base chip for THIS table specifically
+            self._save_base_chip(getattr(self, 'current_investment_id', 0),
+                                 self.nombre_mesa, self.last_base_chip)
         except Exception:
             pass
         # Read column visibility checkboxes
@@ -4542,12 +4587,29 @@ class LinupApp:
                 )
             btn.update()
 
+    def _live_norm(self, g):
+        """In live table mode, map a bare dozen/column to its live (wheel-spread)
+        variant so coverage always uses the live set — e.g. '3a' -> '3a_L', which
+        includes 0. No-op outside live mode or for already-suffixed groups."""
+        if not getattr(self, 'live_table_mode', False):
+            return g
+        name = self._to_display_name(g)
+        if g != name:          # already a live/filtered variant — leave as-is
+            return g
+        f = getattr(self, 'live_filter', None)
+        if name in ('1a', '2a', '3a'):
+            return f'{name}{_DOC_SFX.get(f, "_L")}'
+        if name in ('34', '35', '36') and f:
+            return f'{name}{_COL_SFX.get(f, "")}'
+        return g
+
     def _compute_safety_levels(self):
         """Compute safety level for each number (count of groups that contain it).
         Returns dict {num: count} where count is 0-5."""
         levels = {}
         # Use ALL active groups, not just straight ones
-        active_groups = [g for g in self.grupos_activos
+        active_groups = [self._live_norm(g) for g in self.grupos_activos]
+        active_groups = [g for g in active_groups
                         if g in GRUPOS_MAESTROS]  # make sure group exists
         for num in range(0, 37):
             count = sum(1 for g in active_groups if num in GRUPOS_MAESTROS[g])
@@ -4563,7 +4625,8 @@ class LinupApp:
         - Z0 + ZG + 1a + Even: (Z0 ∪ ZG) ∩ (1a) ∩ (Even)
         - 1a + 2a + R: (1a ∪ 2a) ∩ R
         """
-        active_groups = [g for g in self.grupos_activos
+        active_groups = [self._live_norm(g) for g in self.grupos_activos]
+        active_groups = [g for g in active_groups
                         if g in GRUPOS_MAESTROS]
         if not active_groups:
             return set()
@@ -4612,7 +4675,19 @@ class LinupApp:
                 result = union_set.copy()
             else:
                 result &= union_set
-        
+
+        # 0 has no colour/parity/range, so those filters must not drop it when it
+        # belongs to a base selection (e.g. 3a's wheel-spread, or the Z0 sector).
+        # Mirrors the group design where every 3a_L* variant re-adds 0.
+        base_types   = {'DOZEN', 'COLUMN', 'SECTOR', 'WHEEL', 'WAVE'}
+        only_filters = {'COLOR', 'PARITY', 'RANGE'}
+        present_base   = [u for t, u in type_unions.items() if t in base_types]
+        present_filter = [t for t in type_unions if t in only_filters]
+        if (result is not None and 0 not in result
+                and present_base and present_filter
+                and all(0 in u for u in present_base)):
+            result.add(0)
+
         return result if result is not None else set()
 
     def seleccionar_mixer(self, e):
@@ -5026,6 +5101,7 @@ class LinupApp:
         else:
             all_nums: set = set()
             for g in self.grupos_activos:
+                g = self._live_norm(g)
                 if g in GRUPOS_MAESTROS:
                     all_nums |= GRUPOS_MAESTROS[g]
             safety_levels = self._compute_safety_levels()
