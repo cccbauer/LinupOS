@@ -2061,7 +2061,7 @@ class LinupApp:
         # Bucket sessions for pie chart (5 buckets)
         bucket_ranges = [(-float('inf'), -5), (-5, 0), (0, 5), (5, 10), (10, float('inf'))]
         bucket_labels = ["< -5%", "-5% to 0%", "0% to 5%", "5% to 10%", "> 10%"]
-        bucket_colors = ['#c0392b', '#e67e22', '#95a5a6', '#3498db', '#2ecc71']
+        bucket_colors = ['#c0392b', '#e67e22', '#2ecc71', '#27ae60', '#1e8449']
         bucket_counts = [0] * 5
         
         for r, _, _, _, _ in session_data:
@@ -2109,7 +2109,7 @@ class LinupApp:
                 (f"Total sesiones", f"{n_sessions}", '#95a5a6'),
                 (f"Ganadoras", f"{n_winning}", '#2ecc71'),
                 (f"Perdedoras", f"{n_losing}", '#e74c3c'),
-                (f"Éxito", f"{success_rate:.1f}%", '#3498db'),
+                (f"Efectividad", f"{success_rate:.1f}%", '#3498db'),
                 (f"Max ganancia", f"+{max_gain:.2f}%", '#2ecc71'),
                 (f"Max pérdida", f"{max_loss:.2f}%", '#e74c3c'),
                 (f"Promedio por sesión", f"{avg_per_session:+.3f}%", '#f39c12'),  # Show 3 decimals for precision
@@ -2204,17 +2204,38 @@ class LinupApp:
                                              paint=ft.Paint(color='#666666', stroke_width=1)))
                         x += 8
 
-                fill = [cv.Path.MoveTo(x=sx(pts[0][0]), y=sy(pts[0][1]))]
-                for xi, yi in pts[1:]:
-                    fill.append(cv.Path.LineTo(x=sx(xi), y=sy(yi)))
-                fill.append(cv.Path.LineTo(x=sx(pts[-1][0]), y=MT + ph))
+                # Screen-space points + smooth (Catmull-Rom -> cubic Bézier)
+                # curve segments that still pass through every data point.
+                sp = [(sx(xi), sy(yi)) for xi, yi in pts]
+
+                def _smooth_segments():
+                    segs = []
+                    n = len(sp)
+                    for i in range(n - 1):
+                        p0 = sp[i - 1] if i > 0 else sp[i]
+                        p1 = sp[i]
+                        p2 = sp[i + 1]
+                        p3 = sp[i + 2] if i + 2 < n else sp[i + 1]
+                        cp1x = p1[0] + (p2[0] - p0[0]) / 6.0
+                        cp1y = p1[1] + (p2[1] - p0[1]) / 6.0
+                        cp2x = p2[0] - (p3[0] - p1[0]) / 6.0
+                        cp2y = p2[1] - (p3[1] - p1[1]) / 6.0
+                        segs.append(cv.Path.CubicTo(cp1x=cp1x, cp1y=cp1y,
+                                                    cp2x=cp2x, cp2y=cp2y,
+                                                    x=p2[0], y=p2[1]))
+                    return segs
+
+                curve = _smooth_segments()
+
+                fill = [cv.Path.MoveTo(x=sp[0][0], y=sp[0][1])]
+                fill.extend(curve)
+                fill.append(cv.Path.LineTo(x=sp[-1][0], y=MT + ph))
                 fill.append(cv.Path.LineTo(x=sx(0), y=MT + ph))
                 fill.append(cv.Path.Close())
                 shapes.append(cv.Path(elements=fill, paint=ft.Paint(color=line_color + '33', style=ft.PaintingStyle.FILL)))
 
-                line = [cv.Path.MoveTo(x=sx(pts[0][0]), y=sy(pts[0][1]))]
-                for xi, yi in pts[1:]:
-                    line.append(cv.Path.LineTo(x=sx(xi), y=sy(yi)))
+                line = [cv.Path.MoveTo(x=sp[0][0], y=sp[0][1])]
+                line.extend(curve)
                 shapes.append(cv.Path(elements=line, paint=ft.Paint(color=line_color, stroke_width=2, style=ft.PaintingStyle.STROKE)))
 
                 if len(pts) <= 25:
@@ -2323,68 +2344,54 @@ class LinupApp:
                 if total_sessions == 0:
                     return shapes
 
-                bar_height = 12
-                spacing = 4
-                chart_width = cw - 40
-                center_x = 20 + chart_width / 2
-                
-                # Split into negatives (left) and positives (right)
-                neg_indices = [0, 1]      # < -5%, -5% to 0%
-                pos_indices = [2, 3, 4]   # 0% to 5%, 5% to 10%, > 10%
-                
-                y_start = 10
-                
-                # Draw negatives on the left (extending leftward from center)
-                for idx, i in enumerate(neg_indices):
-                    count = bucket_counts[i]
+                # Pie geometry — centered in the 160px-tall canvas
+                center_x = cw / 2
+                center_y = 80
+                radius = 64
+                inner_radius = 30  # donut hole
+
+                start_angle = -math.pi / 2  # start at 12 o'clock
+                for i, count in enumerate(bucket_counts):
                     if count == 0:
                         continue
-                    pct = (count / total_sessions * 100)
-                    bar_width = (chart_width / 2 - 10) * (pct / 100)  # Left half
-                    y = y_start + idx * (bar_height + spacing)
-                    
-                    # Draw from center leftward (bar extends left from center_x)
+                    frac = count / total_sessions
+                    sweep = frac * 2 * math.pi
+                    end_angle = start_angle + sweep
+
+                    # Approximate the wedge with line segments along the arc
+                    steps = max(2, int(sweep / 0.15) + 1)
+                    elements = [cv.Path.MoveTo(x=center_x, y=center_y)]
+                    for s in range(steps + 1):
+                        a = start_angle + sweep * (s / steps)
+                        elements.append(cv.Path.LineTo(
+                            x=center_x + radius * math.cos(a),
+                            y=center_y + radius * math.sin(a),
+                        ))
+                    elements.append(cv.Path.Close())
                     shapes.append(cv.Path(
-                        elements=[
-                            cv.Path.MoveTo(x=center_x - bar_width, y=y),
-                            cv.Path.LineTo(x=center_x, y=y),
-                            cv.Path.LineTo(x=center_x, y=y + bar_height),
-                            cv.Path.LineTo(x=center_x - bar_width, y=y + bar_height),
-                            cv.Path.Close(),
-                        ],
+                        elements=elements,
                         paint=ft.Paint(color=bucket_colors[i], style=ft.PaintingStyle.FILL)
                     ))
-                    
-                    # Label on the left side
-                    shapes.append(_cv_text(center_x - bar_width - 30, y + 2, f"{pct:.0f}%", color='#ffffff', size=8))
-                
-                # Center line
-                shapes.append(cv.Line(x1=center_x, y1=y_start, x2=center_x, y2=y_start + 120,
-                                     paint=ft.Paint(color='#666666', stroke_width=2)))
-                
-                # Draw positives on the right (extending rightward from center)
-                for idx, i in enumerate(pos_indices):
-                    count = bucket_counts[i]
-                    if count == 0:
-                        continue
-                    pct = (count / total_sessions * 100)
-                    bar_width = (chart_width / 2 - 10) * (pct / 100)  # Right half
-                    y = y_start + idx * (bar_height + spacing)
-                    
-                    # Draw from center rightward (bar extends right from center_x)
-                    shapes.append(cv.Path(
-                        elements=[
-                            cv.Path.MoveTo(x=center_x, y=y),
-                            cv.Path.LineTo(x=center_x + bar_width, y=y),
-                            cv.Path.LineTo(x=center_x + bar_width, y=y + bar_height),
-                            cv.Path.LineTo(x=center_x, y=y + bar_height),
-                            cv.Path.Close(),
-                        ],
-                        paint=ft.Paint(color=bucket_colors[i], style=ft.PaintingStyle.FILL)
-                    ))
-                    
-                    # Label on the right side
-                    shapes.append(_cv_text(center_x + bar_width + 6, y + 2, f"{pct:.0f}%", color='#ffffff', size=8))
+
+                    # Percentage label at the slice midpoint (only if big enough)
+                    if frac >= 0.04:
+                        mid = start_angle + sweep / 2
+                        lr = (radius + inner_radius) / 2
+                        shapes.append(_cv_text(
+                            center_x + lr * math.cos(mid) - 8,
+                            center_y + lr * math.sin(mid) - 6,
+                            f"{frac * 100:.0f}%", color='#ffffff', size=9,
+                        ))
+
+                    start_angle = end_angle
+
+                # Donut hole (matches card background) + total count in the middle
+                shapes.append(cv.Circle(x=center_x, y=center_y, radius=inner_radius,
+                                        paint=ft.Paint(color='#0d0d0d', style=ft.PaintingStyle.FILL)))
+                shapes.append(_cv_text(center_x - 8, center_y - 12,
+                                       str(total_sessions), color='#ffffff', size=14))
+                shapes.append(_cv_text(center_x - 14, center_y + 4,
+                                       "ses.", color='#7f8c8d', size=8))
 
                 return shapes
 
@@ -2690,7 +2697,7 @@ class LinupApp:
                     bar_height = 0.25*inch
                     chart_width = 5.2*inch
                     center_x = 0.4*inch + chart_width / 2
-                    bucket_colors_hex = ['#c0392b', '#e67e22', '#95a5a6', '#3498db', '#2ecc71']
+                    bucket_colors_hex = ['#c0392b', '#e67e22', '#2ecc71', '#27ae60', '#1e8449']
                     
                     # Draw negatives (left) and positives (right)
                     for idx, (label, count, color_hex) in enumerate(zip(bucket_labels, bucket_counts, bucket_colors_hex)):
